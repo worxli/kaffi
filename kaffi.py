@@ -10,6 +10,7 @@ import time, sys, signal
 import mdb
 import legi
 import status
+import sqllogging
 
 tohex = binascii.hexlify
 fromhex = binascii.unhexlify
@@ -183,6 +184,10 @@ def main(args=None):
         args = sys.argv
 
     logging.basicConfig(filename='/root/output.txt', level=logging.DEBUG)
+
+    sqllogging.init()
+    sqllogger = sqllogging.SqlLogHandler(logging.ERROR)
+    logging.getLogger().addHandler(sqllogger)
 
     s = System()
 

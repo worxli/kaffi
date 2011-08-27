@@ -7,7 +7,7 @@ except ImportError:
     import simplejson as json
 import urllib
 
-hosts = ordereddict.OrderedDict([
+org_urls = ordereddict.OrderedDict([
     ('VIS', {
         'rfid': 'http://beer.vis.ethz.ch/rfid/%(rfid)s?format=json',
         'status': 'http://beer.vis.ethz.ch/status/%(nethz)s?format=json',
@@ -29,7 +29,7 @@ def get_json_from_response(response):
     return json.loads(r.content.decode(encoding))
 
 def get_status(rfidnr):
-    for org, urls in hosts.iteritems():
+    for org, urls in org_urls.iteritems():
 
         rfid_url = urls['rfid'] % dict(rfid=rfidnr)
         status_logger.debug("lookup up rfid at %s", rfid_url)
@@ -69,4 +69,12 @@ def check_legi(leginr):
     return None
 
 def report_dispense(rfidnr, org, item):
+    import sqllogging
+    sqllogging.log_msg("DISPENSE", "%s:%s:%s" % (org, rfidnr, item))
+
+    if 'dispensed' in org_urls[org]:
+        import urllib
+        data = json.dumps(dict(rfidnr=rfidnr, item=item))
+        requests.post(org_urls[org]['dispensed'], data)
+
     print "dispensed", rfidnr, org, item
