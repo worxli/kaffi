@@ -9,6 +9,7 @@ import time, sys, signal
 
 import mdb
 import legi
+import status
 
 tohex = binascii.hexlify
 fromhex = binascii.unhexlify
@@ -75,13 +76,14 @@ class System(object):
 
     def __init__(self, legi_enable=None):
         self.serial = self.trans = self.mdb = self.mdb_thread = None
-        self.listener = self.checker = self.legi_thread = None
+        self.listener = self.legi_thread = None
         self.reset_timer = None
         self.legi_enable = legi_enable or fromhex(get_config().get('legi', 'enable'))
+        self.legi_info = None
 
         logging.basicConfig(filename='output.txt', level=logging.INFO)
-        logging.getLogger().setLevel(logging.INFO)
-        logging.getLogger("system").setLevel(logging.INFO)
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger("system").setLevel(logging.DEBUG)
         logging.getLogger("mdb").setLevel(logging.INFO)
         logging.getLogger("translator").setLevel(logging.WARNING)
         logging.getLogger("serial").setLevel(logging.WARNING)
@@ -98,19 +100,14 @@ class System(object):
             self.serial.connect()
 
         if self.mdb is None:
-            def print_bin(v):
-                print "dispensed item data:", tohex(v)
-            self.mdb = mdb.MdbStm(print_bin)
+            self.mdb = mdb.MdbStm(self._handle_dispense)
 
         if self.trans is None:
             self.trans = mdb.TranslatorStm(self.serial, self.mdb.received_data)
 
-        if self.checker is None:
-            self.checker = legi.LegiChecker(self.dispense)
-
         if self.listener is None:
             self.listener = legi.LegiListener(serial.Serial('/dev/ttyS1', 38400, timeout=1),
-                    self.legi_enable, self.checker.receive_legi)
+                    self.legi_enable, self._handle_legi)
 
         self.mdb_thread = threading.Thread(target=self.trans.run)
         self.mdb_thread.daemon = True
@@ -135,6 +132,32 @@ class System(object):
             self.listener.stop()
         if self.reset_timer:
             self.reset_timer.cancel()
+
+    def _handle_legi(self, leginr):
+        system_logger.debug("handling legi %s", leginr)
+        org = status.check_legi(leginr)
+        if not org:
+            return
+
+        for i in xrange(10):
+            if self.mdb.dispense_permitted is None:
+                break
+            time.sleep(0.1)
+
+        self.legi_info = leginr, org
+        self.dispense()
+
+    def _handle_dispense(self, itemdata):
+        system_logger.debug("handling dispense %s", tohex(itemdata))
+        if self.legi_info is None:
+            system_logger.error("got dispense but legi_info is None")
+        else:
+            try:
+                item_number = int(tohex(itemdata), 16)
+                status.report_dispense(self.legi_info[0], self.legi_info[1], item_number)
+            except Exception:
+                system_logger.error("caught exception while reporting dispense for %r, itemdata %r",
+                        self.legi_info, itemdata, exc_info=True)
 
     def is_running(self):
         return (self.mdb_thread is not None and self.mdb_thread.isAlive() or

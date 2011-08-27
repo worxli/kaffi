@@ -33,15 +33,6 @@ class LegiListener(object):
     def stop(self):
         self.running = False
 
-class LegiChecker(object):
-
-    def __init__(self, trigger):
-        self.trigger = trigger
-
-    def receive_legi(self, leginr):
-        # TODO: check
-        self.trigger()
-
 def run():
 
     def print_(arg):
