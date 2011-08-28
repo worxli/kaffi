@@ -132,6 +132,7 @@ class System(object):
         system_logger.debug("handling legi %s", leginr)
         org = status.check_legi(leginr)
         if not org:
+            self.dispense(False)
             return
 
         for i in xrange(10):
