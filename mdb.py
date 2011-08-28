@@ -92,9 +92,14 @@ class TranslatorStm(object):
         called.
         """
         self.running = True
-        while self.running:
-            c = self.serial_stream.read_byte()
-            self.state_fn(c)
+        try:
+            while self.running:
+                c = self.serial_stream.read_byte()
+                self.state_fn(c)
+        except Exception:
+            self.translator_logger.critical("uncaught exception", exc_info=True)
+            self.running = False
+            raise
 
     def stop(self):
         """
@@ -313,7 +318,11 @@ class MdbStm(object):
         elif self.is_command(data, self.CMD_VEND_SUCCESS):
             self.item_data = data[len(self.CMD_VEND_SUCCESS):]
             mdb_logger.info("vend succes item data: %s", tohex(self.item_data))
-            self.item_dispensed_handler(self.item_data)
+            try:
+                self.item_dispensed_handler(self.item_data)
+            except Exception:
+                mdb_logger.error("caught exception while handling dispense with itemdata %s",
+                        tohex(self.item_data), exc_info=True)
             self.response_data = self.RES_END_SESSION
 
         elif self.is_command(data, self.CMD_VEND_FAILURE):
