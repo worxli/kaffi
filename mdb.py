@@ -301,7 +301,7 @@ class MdbStm(object):
             mdb_logger.info("vend request item data: %s", tohex(self.item_data))
 
             if self.dispense_permitted is True:
-                mdb_logger.warn("dispensed allowed")
+                mdb_logger.info("dispense allowed")
                 self.response_data = self.RES_VEND_APPROVED + fromhex('FFFF') # electronic token
             elif self.dispense_permitted is False:
                 mdb_logger.warn("dispensed denied")
