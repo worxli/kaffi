@@ -83,12 +83,6 @@ class System(object):
         self.legi_info = None
 
         logging.basicConfig(filename='output.txt', level=logging.INFO)
-        logging.getLogger().setLevel(logging.DEBUG)
-        logging.getLogger("system").setLevel(logging.DEBUG)
-        logging.getLogger("mdb").setLevel(logging.INFO)
-        logging.getLogger("translator").setLevel(logging.WARNING)
-        logging.getLogger("serial").setLevel(logging.WARNING)
-        logging.getLogger("legi").setLevel(logging.INFO)
 
     def start(self):
         if self.is_running():
@@ -183,11 +177,18 @@ def main(args=None):
     if args is None:
         args = sys.argv
 
-    logging.basicConfig(filename='/root/output.txt', level=logging.DEBUG)
+
+    logging.basicConfig(filename='/root/output.txt', format="%(asctime)s|%(levelname)s|%(name)s|%(message)s", level=logging.INFO)
 
     sqllogging.init()
-    sqllogger = sqllogging.SqlLogHandler(logging.ERROR)
+    sqllogger = sqllogging.SqlLogHandler(logging.WARNING)
     logging.getLogger().addHandler(sqllogger)
+
+    logging.getLogger("system").setLevel(logging.INFO)
+    logging.getLogger("mdb").setLevel(logging.INFO)
+    logging.getLogger("translator").setLevel(logging.WARNING)
+    logging.getLogger("serial").setLevel(logging.WARNING)
+    logging.getLogger("legi").setLevel(logging.INFO)
 
     s = System()
 

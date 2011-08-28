@@ -82,7 +82,7 @@ class TranslatorStm(object):
         elif c == self.ACK:
             pass
         elif c == self.NAK:
-            translator_logger.warn("es NAK")
+            translator_logger.info("es NAK")
         else:
             translator_logger.warn("mega komisch: %s im idle" % tohex(c))
 
