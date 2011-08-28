@@ -1,6 +1,5 @@
 
 from sqlalchemy import sql, schema, create_engine
-from kaffi import get_config
 import logging
 
 metadata = schema.MetaData()
@@ -13,6 +12,7 @@ fail_logger = logging.getLogger("fail")
 def init():
     global log_dbengine, coffeelog_tbl, config
 
+    from kaffi import get_config
     config = get_config()
 
     fail_logger.propagate = False
