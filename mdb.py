@@ -343,7 +343,7 @@ class MdbStm(object):
 
         elif self.is_command(data, self.CMD_READER_ENABLE):
             if (self.state is not self.STATE_DISABLED):
-                logging.warn("got disable while in state %s", self.state)
+                logging.warn("got enable while in state %s", self.state)
             self.dispense_permitted = None
             self._set_state(self.STATE_ENABLED)
 
