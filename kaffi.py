@@ -133,6 +133,8 @@ class System(object):
         org = status.check_legi(leginr)
         if not org:
             self.dispense(False)
+            import sqllogging
+            sqllogging.log_msg('DENIED', leginr)
             return
 
         for i in xrange(10):
