@@ -14,3 +14,5 @@ def get_status(rfidnr):
     user = aid.getUser(int(rfidnr))
     return user and user['apps']['beer'] > 0
 
+def report_dispensed(rfidnr, item):
+    print "dispensed", item, "for", rfidnr, ", AMIV"

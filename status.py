@@ -6,16 +6,16 @@ import visstatus
 import amivstatus
 
 org_handlers = ordereddict.OrderedDict([
-    ('VIS', visstatus.get_status),
-    ('AMIV', amivstatus.get_status),
+    ('VIS', (visstatus.get_status, visstatus.report_dispensed)),
+    ('AMIV', (amivstatus.get_status, amivstatus.report_dispensed)),
 ])
 
 status_logger = logging.getLogger("status")
 
 def check_legi(leginr):
-    for org, get_status in org_handlers.iteritems():
+    for org, handlers in org_handlers.iteritems():
         try:
-            status = get_status(leginr)
+            status = handlers[0](leginr)
         except Exception:
             status_logger.warning("caught exception in get_status for legi %s, org %s", leginr, org, exc_info=True)
         else:
@@ -27,8 +27,7 @@ def report_dispense(rfidnr, org, item):
     import sqllogging
     sqllogging.log_msg("DISPENSE", "%s:%s:%s" % (org, rfidnr, item))
 
-    #if 'dispensed' in org_urls[org]:
-    #    data = json.dumps(dict(rfidnr=rfidnr, item=item))
-    #    requests.post(org_urls[org]['dispensed'], data)
-
-    print "dispensed", rfidnr, org, item
+    try:
+        org_handlers[org][1](rfidnr, item)
+    except Exception:
+        status_logger.error("caught exception report_dispense for legi %s, org %s, item %s", rfidnr, org, item, exc_info=True)

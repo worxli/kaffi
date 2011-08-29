@@ -22,7 +22,6 @@ def get_json_from_response(response, data):
         except zlib.error:
             pass
 
-    print headers
     content_type = headers['content-type']
     m = re.match(r'^\s*(text/[^;]+);\s*charset=([a-zA-Z0-9-]+)\s*$', content_type)
     if m:
@@ -32,12 +31,13 @@ def get_json_from_response(response, data):
     if content_type not in ('application/json', 'text/json'):
         raise ValueError("got unrecognized content type %s from %s's rfid url" % r.headers['content-type'], org)
 
-    print repr(data)
-    result = json.loads(data.decode(encoding))
-    print repr(result)
-    return result
+    return json.loads(data.decode(encoding))
 
-def fetch_url(url, body=None, headers=None):
+def request_url(url, method, body=None, headers=None):
+    if body is None:
+        body = ''
+    if headers is None:
+        headers = {}
 
     if '//' not in url:
         url = 'https://'+url
@@ -59,12 +59,20 @@ def fetch_url(url, body=None, headers=None):
         import httplib
         c = httplib.HTTPConnection(o.hostname, int(o.port or 80))
 
-    c.request('GET', o.path + '?' + o.query, body, headers)
+    c.request(method, o.path + '?' + o.query, body, headers)
     response = c.getresponse()
     data = response.read()
     c.close()
 
     return response, data
+
+def fetch_url(url, body=None, headers=None):
+
+    return request_url(url, 'GET', body, headers)
+
+def post_url(url, data=None, headers=None):
+
+    return request_url(url, 'POST', data, headers)
 
 def get_status(rfidnr):
 
@@ -84,14 +92,28 @@ def get_status(rfidnr):
         return False
 
     rfid_result = get_json_from_response(response, data)
-    quoted_result = dict((k, urllib.quote(v)) for k, v in rfid_result.iteritems() if isinstance(v, basestring))
+    quoted_result = dict((k, urllib.quote(v.encode('utf-8'))) for k, v in rfid_result.iteritems() if isinstance(v, basestring))
     status_url = status_url_fmt % quoted_result
     logger.debug("lookup up status for %s at %s", rfidnr, status_url)
 
     response, data = fetch_url(status_url, headers=dict(Accept="application/json;q=1.0, text/json;q=0.9"))
     if response.status != 200:
-        raise urllib2.HTTPError(status_url, response.status, response.reason, response.getheaders())
+        raise urllib2.HTTPError(status_url, response.status, response.reason, response.getheaders(), None)
 
     status_result = get_json_from_response(response, data)
 
-    return status_result['beer'] > 0
+    return status_result['coffees'] > 0
+
+def report_dispensed(rfidnr, item):
+    from kaffi import get_config
+    config = get_config()
+
+    dispense_url_fmt = config.get('visstatus', 'dispense_url')
+    dispense_url = dispense_url_fmt % dict(rfidnr=rfidnr, item=item)
+
+    dispense_data_fmt = config.get('visstatus', 'dispense_data')
+    dispense_data = dispense_data_fmt % dict(rfidnr=rfidnr, item=item)
+
+    response, data = post_url(dispense_url, dispense_data)
+    if response.status != 200:
+        raise urllib2.HTTPError(dispense_url, response.status, response.reason, response.getheaders(), None)
