@@ -17,7 +17,10 @@ def init():
 
     fail_logger.propagate = False
     fail_fp = open(config.get('log', 'faillog'), 'a', buffering=1)
-    fail_logger.addHandler(logging.StreamHandler(fail_fp))
+    fail_handler = logging.StreamHandler(fail_fp)
+    fail_formatter = logging.Formatter(fmt="%(asctime)s|%(levelname)s|%(name)s|%(message)s")
+    fail_handler.setFormatter(fail_formatter)
+    fail_logger.addHandler(fail_handler)
 
     db_uri = config.get('log', 'db_uri')
     db_tbl = config.get('log', 'db_tbl')
