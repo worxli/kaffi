@@ -74,31 +74,20 @@ def post_url(url, data=None, headers=None):
 
     return request_url(url, 'POST', data, headers)
 
-def get_status(rfidnr):
+def get_status(rfid):
 
     from kaffi import get_config
     config = get_config()
-    rfid_url_fmt = config.get('visstatus', 'rfid_url')
     status_url_fmt = config.get('visstatus', 'status_url')
 
-    rfid_url = rfid_url_fmt % dict(rfid=rfidnr)
-    logger.debug("lookup up rfid at %s", rfid_url)
-
-    response, data = fetch_url(rfid_url, headers=dict(Accept="application/json;q=1.0, text/json;q=0.9"))
+    status_url = status_url_fmt % dict(rfid=rfid)
+    logger.debug("looking up status at %s", status_url)
+    response, data = fetch_url(status_url, headers=dict(Accept="application/json;q=1.0, text/json;q=0.9"))
     if response.status == 404:
         return False
     if response.status != 200:
-        logger.warning("got status %d %s from VIS's rfid url", response.status, response.reason)
+        logger.warning("got status %d %s from VIS's status url", response.status, response.reason)
         return False
-
-    rfid_result = get_json_from_response(response, data)
-    quoted_result = dict((k, urllib.quote(v.encode('utf-8'))) for k, v in rfid_result.iteritems() if isinstance(v, basestring))
-    status_url = status_url_fmt % quoted_result
-    logger.debug("lookup up status for %s at %s", rfidnr, status_url)
-
-    response, data = fetch_url(status_url, headers=dict(Accept="application/json;q=1.0, text/json;q=0.9"))
-    if response.status != 200:
-        raise urllib2.HTTPError(status_url, response.status, response.reason, response.getheaders(), None)
 
     status_result = get_json_from_response(response, data)
 
