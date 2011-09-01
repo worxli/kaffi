@@ -8,9 +8,10 @@ coffeelog_tbl = None
 config = None
 
 fail_logger = logging.getLogger("fail")
+reconnect_timer = None
 
 def init():
-    global log_dbengine, coffeelog_tbl, config
+    global config
 
     from kaffi import get_config
     config = get_config()
@@ -22,6 +23,13 @@ def init():
     fail_handler.setFormatter(fail_formatter)
     fail_logger.addHandler(fail_handler)
 
+    try_connect()
+
+def try_connect(retry_interval=300):
+    global log_dbengine, coffeelog_tbl, reconnect_timer
+    if reconnect_timer:
+        reconnect_timer.cancel()
+
     db_uri = config.get('log', 'db_uri')
     db_tbl = config.get('log', 'db_tbl')
     try:
@@ -29,6 +37,14 @@ def init():
         coffeelog_tbl = schema.Table(db_tbl, metadata, autoload=True, autoload_with=log_dbengine)
     except exc.OperationalError:
         fail_logger.error("Failed to connect to sql log", exc_info=True)
+        logging.critical("Failed to connect to sql log")
+        import threading
+        reconnect_timer = threading.Timer(retry_interval, try_connect)
+        reconnect_timer.start()
+
+def stop_retrying():
+    if reconnect_timer:
+        reconnect_timer.cancel()
 
 def log_msg(msg_type, msg):
     try:

@@ -127,6 +127,7 @@ class System(object):
             self.listener.stop()
         if self.reset_timer:
             self.reset_timer.cancel()
+        sqllogging.stop_retrying()
 
     def _handle_legi(self, leginr):
         system_logger.debug("handling legi %s", leginr)
@@ -180,8 +181,8 @@ def main(args=None):
     if args is None:
         args = sys.argv
 
-
     logging.basicConfig(filename='/root/output.txt', format="%(asctime)s|%(levelname)s|%(name)s|%(message)s", level=logging.INFO)
+    logging.info("setting up logging")
 
     sqllogging.init()
     sqllogger = sqllogging.SqlLogHandler(logging.WARNING)
