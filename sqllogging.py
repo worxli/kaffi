@@ -1,5 +1,5 @@
 
-from sqlalchemy import sql, schema, create_engine
+from sqlalchemy import sql, schema, create_engine, exc
 import logging
 
 metadata = schema.MetaData()
@@ -24,9 +24,11 @@ def init():
 
     db_uri = config.get('log', 'db_uri')
     db_tbl = config.get('log', 'db_tbl')
-    log_dbengine = create_engine(db_uri, pool_recycle=3600)
-
-    coffeelog_tbl = schema.Table(db_tbl, metadata, autoload=True, autoload_with=log_dbengine)
+    try:
+        log_dbengine = create_engine(db_uri, pool_recycle=3600)
+        coffeelog_tbl = schema.Table(db_tbl, metadata, autoload=True, autoload_with=log_dbengine)
+    except exc.OperationalError:
+        fail_logger.error("Failed to connect to sql log", exc_info=True)
 
 def log_msg(msg_type, msg):
     try:
