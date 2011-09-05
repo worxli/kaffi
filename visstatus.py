@@ -29,7 +29,7 @@ def get_json_from_response(response, data):
     else:
         content_type, encoding = content_type.strip(), 'utf-8'
     if content_type not in ('application/json', 'text/json'):
-        raise ValueError("got unrecognized content type %s from %s's rfid url" % r.headers['content-type'], org)
+        raise ValueError("got unrecognized content type %s" % headers['content-type'])
 
     return json.loads(data.decode(encoding))
 
