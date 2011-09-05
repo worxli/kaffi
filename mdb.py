@@ -282,6 +282,12 @@ class MdbStm(object):
             #    self.display_update = None
 
         elif self.is_command(data, self.CMD_SETUP_CONF_DATA):
+            if self.state == self.STATE_ENABLED:
+                # WORKAROUND: sometimes after a dispense the machine starts
+                # flooding setup conf data cmds.
+                mdb_logger.warning("got setup conf data in enabled state, sending malfunction")
+                self.response_data = self.RES_MALFUNCTION
+                return
             self.config_data = data[len(self.CMD_SETUP_CONF_DATA):]
             self.response_data = ''.join([
                 self.RES_READER_CONF_DATA,
