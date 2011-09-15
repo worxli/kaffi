@@ -157,6 +157,8 @@ class System(object):
             except Exception:
                 system_logger.error("caught exception while reporting dispense for %r, itemdata %r",
                         self.legi_info, itemdata, exc_info=True)
+            finally:
+                self.legi_info = None
 
     def is_running(self):
         return (self.mdb_thread is not None and self.mdb_thread.isAlive() or
@@ -193,6 +195,7 @@ def main(args=None):
     logging.getLogger("translator").setLevel(logging.WARNING)
     logging.getLogger("serial").setLevel(logging.WARNING)
     logging.getLogger("legi").setLevel(logging.INFO)
+    logging.getLogger("status").setLevel(logging.INFO)
 
     s = System()
 
