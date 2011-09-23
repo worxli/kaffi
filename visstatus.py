@@ -84,6 +84,7 @@ def get_status(rfid):
     logger.debug("looking up status at %s", status_url)
     response, data = fetch_url(status_url, headers=dict(Accept="application/json;q=1.0, text/json;q=0.9"))
     if response.status == 404:
+        logger.debug("lookup of status for %s gave 404", rfid)
         return False
     if response.status != 200:
         logger.warning("got status %d %s from VIS's status url", response.status, response.reason)
@@ -96,6 +97,7 @@ def get_status(rfid):
 def report_dispensed(rfidnr, item):
     from kaffi import get_config
     config = get_config()
+    logger.info("dispensed %s for %s, VIS", item, rfidnr)
 
     dispense_url_fmt = config.get('visstatus', 'dispense_url')
     dispense_url = dispense_url_fmt % dict(rfidnr=rfidnr, item=item)
