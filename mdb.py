@@ -221,6 +221,17 @@ class MdbStm(object):
         mdb_logger.info("transitioning from %s to %s", self.state, state)
         self.state = state
 
+    def _handle_dispense_wrapper(self, item_data):
+        def _run():
+            try:
+                self.item_dispensed_handler(item_data)
+            except Exception:
+                mdb_logger.error("caught exception while handling dispense with itemdata %s",
+                        tohex(item_data), exc_info=True)
+        #t = threading.Thread(target=_run)
+        #t.start()
+        _run()
+
     def is_command(self, data, command):
         """
         Check whether a data string matches a given MDB command.
@@ -274,7 +285,7 @@ class MdbStm(object):
                 self.response_data = self.RES_BEGIN_SESS + fromhex('FFFF')
                 self._set_state(self.STATE_SESSION_IDLE)
 
-            elif self.state is self.STATE_SESSION_IDLE and self.dispense_permitted is not True:
+            elif self.state is self.STATE_SESSION_IDLE and self.dispense_permitted is False:
                 self.response_data = self.RES_SESS_CANCEL_REQ
 
             #elif self.state is self.STATE_ENABLED and self.display_update:
@@ -315,6 +326,7 @@ class MdbStm(object):
             else:
                 mdb_logger.warn("got vend_request with dispense_permitted == %r", self.dispense_permitted)
                 self.response_data = self.RES_VEND_DENIED
+            self.dispense_permitted = None
 
         elif self.is_command(data, self.CMD_VEND_CANCEL):
             mdb_logger.warn("dispense canceled")
@@ -324,12 +336,9 @@ class MdbStm(object):
         elif self.is_command(data, self.CMD_VEND_SUCCESS):
             self.item_data = data[len(self.CMD_VEND_SUCCESS):]
             mdb_logger.info("vend succes item data: %s", tohex(self.item_data))
-            try:
-                self.item_dispensed_handler(self.item_data)
-            except Exception:
-                mdb_logger.error("caught exception while handling dispense with itemdata %s",
-                        tohex(self.item_data), exc_info=True)
+            self._handle_dispense_wrapper(self.item_data)
             self.response_data = self.RES_END_SESSION
+            self._set_state(self.STATE_ENABLED)
 
         elif self.is_command(data, self.CMD_VEND_FAILURE):
             mdb_logger.warn("dispense failed")
