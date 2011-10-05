@@ -193,6 +193,11 @@ class MdbStm(object):
     STATE_ENABLED = "__enabled"
     STATE_SESSION_IDLE = "__session_idle"
 
+    DISPENSE_NONE = None
+    DISPENSE_ALLOWED = "__allowed"
+    DISPENSE_DENIED = "__denied"
+    DISPENSE_COMPLETED = "__completed"
+
     #
     # Misc codes
     #
@@ -210,7 +215,7 @@ class MdbStm(object):
         self.response_data = ""
         self.state = self.STATE_INACTIVE
         self.config_data = self.maxmin_data = self.item_data = None
-        self.dispense_permitted = None
+        self.dispense = self.DISPENSE_NONE
         self.item_dispensed_handler = item_dispensed_handler
         #self.display_update = None
 
@@ -221,16 +226,32 @@ class MdbStm(object):
         mdb_logger.info("transitioning from %s to %s", self.state, state)
         self.state = state
 
-    def _handle_dispense_wrapper(self, item_data):
-        def _run():
-            try:
-                self.item_dispensed_handler(item_data)
-            except Exception:
-                mdb_logger.error("caught exception while handling dispense with itemdata %s",
-                        tohex(item_data), exc_info=True)
-        #t = threading.Thread(target=_run)
-        #t.start()
-        _run()
+    def _set_dispense(self, dispense):
+        """
+        Internal method. Update dispense state.
+        """
+        if dispense is self.dispense:
+            mdb_logger.debug("no-op transitioning dispense from/to %s", dispense)
+        else:
+            mdb_logger.info("transitioning dispense from %s to %s", self.dispense, dispense)
+        self.dispense = dispense
+
+    def cancel_dispense(self):
+        if self.dispense is self.DISPENSE_COMPLETED:
+            return True
+        if self.dispense is not self.DISPENSE_NONE:
+            self._set_dispense(self.DISPENSE_DENIED)
+            return True
+        return False
+
+    def dispense(self, dispense):
+        if self.dispense is not self.DISPENSE_NONE:
+            mdb_logger.warn("got mdb.dispense() while dispense is %r" % self.dispense)
+            return
+        if dispense:
+            self.dispense = self.DISPENSE_ALLOWED
+        else:
+            self.dispense = self.DISPENSE_DENIED
 
     def is_command(self, data, command):
         """
@@ -274,18 +295,24 @@ class MdbStm(object):
         if self.is_command(data, self.CMD_RESET):
             self._set_state(self.STATE_INACTIVE)
             self.config_data = self.maxmin_data = self.item_data = None
-            self.dispense_permitted = None
+            self._set_dispense(self.DISPENSE_NONE)
 
         elif self.is_command(data, self.CMD_POLL):
             if self.state is self.STATE_INACTIVE:
                 self.response_data = self.RES_RESET
                 self._set_state(self.STATE_DISABLED)
 
-            elif self.state is self.STATE_ENABLED and self.dispense_permitted is not None:
+            elif (self.state is self.STATE_ENABLED and (
+                  self.dispense is self.DISPENSE_ALLOWED or self.dispense is self.DISPENSE_DENIED)):
                 self.response_data = self.RES_BEGIN_SESS + fromhex('FFFF')
                 self._set_state(self.STATE_SESSION_IDLE)
 
-            elif self.state is self.STATE_SESSION_IDLE and self.dispense_permitted is False:
+            elif self.state is self.STATE_ENABLED and self.dispense is self.DISPENSE_COMPLETED:
+                mdb_logger.warning("detected dispense complete status while in enabled state")
+                self._set_dispense(self.DISPENSE_NONE)
+
+            elif (self.state is self.STATE_SESSION_IDLE and
+                  (self.dispense is self.DISPENSE_DENIED or self.dispense is self.DISPENSE_NONE)):
                 self.response_data = self.RES_SESS_CANCEL_REQ
 
             #elif self.state is self.STATE_ENABLED and self.display_update:
@@ -317,35 +344,45 @@ class MdbStm(object):
             self.item_data = data[len(self.CMD_VEND_REQUEST):]
             mdb_logger.info("vend request item data: %s", tohex(self.item_data))
 
-            if self.dispense_permitted is True:
+            if self.dispense is self.DISPENSE_ALLOWED:
                 mdb_logger.info("dispense allowed")
                 self.response_data = self.RES_VEND_APPROVED + fromhex('FFFF') # electronic token
-            elif self.dispense_permitted is False:
+            elif self.dispense is self.DISPENSE_DENIED:
                 mdb_logger.info("dispense denied")
                 self.response_data = self.RES_VEND_DENIED
             else:
-                mdb_logger.warn("got vend_request with dispense_permitted == %r", self.dispense_permitted)
+                mdb_logger.warn("got vend_request with dispense == %r", self.dispense)
                 self.response_data = self.RES_VEND_DENIED
-            self.dispense_permitted = None
+            self._set_dispense(self.DISPENSE_COMPLETED)
 
         elif self.is_command(data, self.CMD_VEND_CANCEL):
             mdb_logger.warn("dispense canceled")
-            self.dispense_permitted = None
+            self._set_dispense(self.DISPENSE_COMPLETED)
             self.response_data = self.RES_VEND_DENIED
 
         elif self.is_command(data, self.CMD_VEND_SUCCESS):
+            if self.dispense is not self.DISPENSE_COMPLETED:
+                mdb_logger.warning("got CMD_VEND_SUCCESS but dispense is %r" % self.dispense)
+                self._set_dispense(self.DISPENSE_COMPLETED)
             self.item_data = data[len(self.CMD_VEND_SUCCESS):]
             mdb_logger.info("vend succes item data: %s", tohex(self.item_data))
-            self._handle_dispense_wrapper(self.item_data)
+            try:
+                self.item_dispensed_handler(self.item_data)
+            except Exception:
+                mdb_logger.error("caught exception while handling dispense with itemdata %s",
+                        tohex(self.item_data), exc_info=True)
             self.response_data = self.RES_END_SESSION
-            self._set_state(self.STATE_ENABLED)
 
         elif self.is_command(data, self.CMD_VEND_FAILURE):
+            if self.dispense is not self.DISPENSE_COMPLETED:
+                mdb_logger.warning("got CMD_VEND_FAILURE but dispense is %r" % self.dispense)
+                self._set_dispense(self.DISPENSE_COMPLETED)
             mdb_logger.warn("dispense failed")
+            self.response_data = self.RES_END_SESSION
 
         elif self.is_command(data, self.CMD_VEND_SESS_COMPLETE):
             self.response_data = self.RES_END_SESSION
-            self.dispense_permitted = None
+            self._set_dispense(self.DISPENSE_NONE)
             self._set_state(self.STATE_ENABLED)
 
         # not handled: CASH SALE
@@ -353,17 +390,17 @@ class MdbStm(object):
         elif self.is_command(data, self.CMD_READER_DISABLE):
             if self.state is not self.STATE_ENABLED:
                 logging.warn("got disable while in state %s", self.state)
-            self.dispense_permitted = None
+            self._set_dispense(self.DISPENSE_NONE)
             self._set_state(self.STATE_DISABLED)
 
         elif self.is_command(data, self.CMD_READER_ENABLE):
             if (self.state is not self.STATE_DISABLED):
                 logging.warn("got enable while in state %s", self.state)
-            self.dispense_permitted = None
+            self._set_dispense(self.DISPENSE_NONE)
             self._set_state(self.STATE_ENABLED)
 
         elif self.is_command(data, self.CMD_READER_CANCEL):
-            self.dispense_permitted = None
+            self._set_dispense(self.DISPENSE_NONE)
             self.response_data = self.RES_CANCELLED
 
         elif self.is_command(data, self.CMD_REVALUE_REQUEST):

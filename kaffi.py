@@ -171,10 +171,9 @@ class System(object):
         if allow is not None:
             if not self.is_running():
                 self.start()
-            if self.mdb.dispense_permitted is not None:
-                self.mdb.dispense_permitted = None
+            while self.mdb.cancel_dispense():
                 time.sleep(1)
-        self.mdb.dispense_permitted = allow
+        self.mdb.dispense(allow)
         if allow:
             self.reset_timer = threading.Timer(8, lambda: self.dispense(None))
             self.reset_timer.start()
