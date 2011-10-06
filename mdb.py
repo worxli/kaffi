@@ -90,6 +90,7 @@ class MdbStm(object):
     STATE_DISABLED = "__disabled"
     STATE_ENABLED = "__enabled"
     STATE_SESSION_IDLE = "__session_idle"
+    STATE_SESSION_DISPENSED = "__session_dispensed"
     STATE_SESSION_ENDING = "__session_ending"
 
     #
@@ -109,7 +110,7 @@ class MdbStm(object):
         self.response_data = ""
         self.state = self.STATE_INACTIVE
         self.config_data = self.maxmin_data = self.item_data = None
-        self.dispense = self.DISPENSE_NONE
+        #self.dispense = self.DISPENSE_NONE
         self.get_dispense_status = get_dispense_status
         self.item_dispensed_handler = item_dispensed_handler
         #self.display_update = None
@@ -180,6 +181,11 @@ class MdbStm(object):
                 self.response_data = self.RES_SESS_CANCEL_REQ
                 self._set_state(self.STATE_SESSION_ENDING)
 
+            elif (self.state is self.STATE_SESSION_ENDING):
+                self.item_dispensed_handler(None)
+                self.response_data = self.RES_SESS_CANCEL_REQ
+                self._set_state(self.STATE_SESSION_ENDING)
+
             #elif self.state is self.STATE_ENABLED and self.display_update:
             #    self.response_data = self.RES_DISPLAY_REQ + fromhex('64') + self.display_update[0]
             #    self.display_update = None
@@ -214,16 +220,19 @@ class MdbStm(object):
                 # this should not happen according to mdb protocol
                 mdb_logger.warning("got vend request outside state session_idle")
                 self.response_data = self.RES_VEND_DENIED
+                self._set_state(self.STATE_SESSION_ENDING)
             elif dispense is True:
                 mdb_logger.info("dispense allowed")
                 self.response_data = self.RES_VEND_APPROVED + fromhex('FFFF') # electronic token
+                self._set_state(self.STATE_SESSION_DISPENSED)
             elif dispense is False:
                 mdb_logger.info("dispense denied")
                 self.response_data = self.RES_VEND_DENIED
+                self._set_state(self.STATE_SESSION_ENDING)
             else:
                 mdb_logger.warn("got vend_request with dispense == %r", dispense)
                 self.response_data = self.RES_VEND_DENIED
-            self._set_state(self.STATE_SESSION_ENDING)
+                self._set_state(self.STATE_SESSION_ENDING)
 
         elif self.is_command(data, self.CMD_VEND_CANCEL):
             mdb_logger.warn("dispense canceled")
@@ -231,9 +240,9 @@ class MdbStm(object):
             self.response_data = self.RES_VEND_DENIED
 
         elif self.is_command(data, self.CMD_VEND_SUCCESS):
-            if self.state is not self.STATE_SESSION_ENDING:
+            if self.state is not self.STATE_SESSION_DISPENSED:
                 mdb_logger.warning("got CMD_VEND_SUCCESS in state %r" % self.state)
-                self._set_state(self.STATE_SESSION_ENDING)
+            self._set_state(self.STATE_SESSION_ENDING)
             self.item_data = data[len(self.CMD_VEND_SUCCESS):]
             mdb_logger.info("vend succes item data: %s", tohex(self.item_data))
             try:
@@ -241,15 +250,13 @@ class MdbStm(object):
             except Exception:
                 mdb_logger.error("caught exception while handling dispense with itemdata %s",
                         tohex(self.item_data), exc_info=True)
-            self.response_data = self.RES_END_SESSION
 
         elif self.is_command(data, self.CMD_VEND_FAILURE):
-            if self.state is not self.STATE_SESSION_ENDING:
+            if self.state is not self.STATE_SESSION_DISPENSED:
                 mdb_logger.warning("got CMD_VEND_FAILURE in state %r" % self.state)
-                self._set_state(self.STATE_SESSION_ENDING)
+            self._set_state(self.STATE_SESSION_ENDING)
             mdb_logger.warn("dispense failed")
             self.item_dispensed_handler(None)
-            self.response_data = self.RES_END_SESSION
 
         elif self.is_command(data, self.CMD_VEND_SESS_COMPLETE):
             if self.state is not self.STATE_SESSION_ENDING:
