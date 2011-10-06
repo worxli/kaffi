@@ -164,7 +164,6 @@ class MdbStm(object):
         if self.is_command(data, self.CMD_RESET):
             self._set_state(self.STATE_INACTIVE)
             self.config_data = self.maxmin_data = self.item_data = None
-            self._set_dispense(self.DISPENSE_NONE)
 
         elif self.is_command(data, self.CMD_POLL):
             if self.state is self.STATE_INACTIVE:
@@ -278,7 +277,6 @@ class MdbStm(object):
             self._set_state(self.STATE_ENABLED)
 
         elif self.is_command(data, self.CMD_READER_CANCEL):
-            self._set_dispense(self.DISPENSE_NONE)
             self.response_data = self.RES_CANCELLED
 
         elif self.is_command(data, self.CMD_REVALUE_REQUEST):
