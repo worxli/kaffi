@@ -7,6 +7,7 @@ import serial
 import binascii
 import time, sys, signal
 
+import translator
 import mdb
 import legi
 import status
@@ -98,7 +99,7 @@ class System(object):
             self.mdb = mdb.MdbStm(self._handle_dispense)
 
         if self.trans is None:
-            self.trans = mdb.TranslatorStm(self.serial, self.mdb.received_data)
+            self.trans = translator.TranslatorStm(self.serial, self.mdb.received_data)
 
         if self.listener is None:
             self.listener = legi.LegiListener(serial.Serial('/dev/ttyS1', 38400, timeout=1),
@@ -129,6 +130,9 @@ class System(object):
             self.reset_timer.cancel()
         sqllogging.stop_retrying()
 
+    def _get_dispense_state(self):
+        return self.dispense_permitted
+
     def _handle_legi(self, leginr):
         system_logger.debug("handling legi %s", leginr)
         org = status.check_legi(leginr)
@@ -139,7 +143,7 @@ class System(object):
             return
 
         for i in xrange(10):
-            if self.mdb.dispense_permitted is None:
+            if self.dispense_permitted is None:
                 break
             time.sleep(0.1)
 
@@ -148,17 +152,21 @@ class System(object):
 
     def _handle_dispense(self, itemdata):
         system_logger.debug("handling dispense %s", tohex(itemdata))
+        self.dispense(None)
+        if itemdata is None:
+            # dispense denied/cancelled
+            return
         if self.legi_info is None:
             system_logger.error("got dispense but legi_info is None")
         else:
+            legi_info = self.legi_info
+            self.legi_info = None
             try:
                 item_number = int(tohex(itemdata), 16)
-                status.report_dispense(self.legi_info[0], self.legi_info[1], item_number)
+                status.report_dispense(legi_info[0], legi_info[1], item_number)
             except Exception:
                 system_logger.error("caught exception while reporting dispense for %r, itemdata %r",
                         self.legi_info, itemdata, exc_info=True)
-            finally:
-                self.legi_info = None
 
     def is_running(self):
         return (self.mdb_thread is not None and self.mdb_thread.isAlive() or
@@ -171,9 +179,7 @@ class System(object):
         if allow is not None:
             if not self.is_running():
                 self.start()
-            while self.mdb.cancel_dispense():
-                time.sleep(1)
-        self.mdb.dispense(allow)
+        self.dispense_permitted = allow
         if allow:
             self.reset_timer = threading.Timer(8, lambda: self.dispense(None))
             self.reset_timer.start()

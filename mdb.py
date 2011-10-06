@@ -5,108 +5,6 @@ import logging
 tohex = binascii.hexlify
 fromhex = binascii.unhexlify
 
-translator_logger = logging.getLogger("translator")
-
-class TranslatorStm(object):
-
-    STX = '\x02' #Start transaction
-    ETX = '\x03' #End transaction
-    EOT = '\x04'
-    DLE = '\x10' #Escape character
-    ACK = '\x06'
-    NAK = '\x15'
-
-    def __init__(self, serial_stream, handler):
-        """
-        Initialize the Translator.
-
-        :param serial_stream: object with read_byte() and write_bytes(bytes)
-        :param handler: callable that takes newly received data and responds
-            with data to be sent
-        """
-        super(TranslatorStm, self).__init__()
-        self.serial_stream = serial_stream
-        self.handler = handler
-        self.state_fn = self._transaction_idle
-        self.running = False
-        self.received_data = ""
-
-    def _transaction_running(self, c):
-        """
-        Internal state handler. Current state is inside a receive transaction
-        but not after a DLE.
-        """
-        if c == self.DLE:
-            self.state_fn = self._escape_received
-        else:
-            self.received_data += c
-
-    def _escape_received(self, c):
-        """
-        Internal state handler. Current state is immediately after a DLE
-        """
-        if c == self.ETX:
-            # receive complete, forward to handler
-            translator_logger.info("received %s", tohex(self.received_data))
-            data = self.handler(self.received_data)
-            self.received_data = ""
-
-            # prepare to send data
-            translator_logger.info("sending %s", tohex(data))
-            data = data.replace(self.DLE, self.DLE + self.DLE)
-
-            # why send ack?
-            self.serial_stream.write_bytes(self.ACK)
-
-            # wrap data in transaction
-            self.serial_stream.write_bytes(self.STX + data + self.DLE + self.ETX)
-
-            # update state
-            self.state_fn = self._transaction_idle
-
-        elif c == self.DLE:
-            # DLE escapes itself
-            self.received_data += self.DLE
-            self.state_fn = self._transaction_running
-
-        else:
-            translator_logger.warn("mega komisch: %s nachem DLE" % tohex(c))
-
-    def _transaction_idle(self, c):
-        """
-        Internal state handler. Current state is after an ETX, i.e. between
-        receive transactions.
-        """
-        if c == self.STX:
-            self.state_fn = self._transaction_running
-        elif c == self.ACK:
-            pass
-        elif c == self.NAK:
-            translator_logger.info("es NAK")
-        else:
-            translator_logger.warn("mega komisch: %s im idle" % tohex(c))
-
-    def run(self):
-        """
-        Run this state machine. Does not terminate until stop() has been
-        called.
-        """
-        self.running = True
-        try:
-            while self.running:
-                c = self.serial_stream.read_byte()
-                self.state_fn(c)
-        except Exception:
-            self.translator_logger.critical("uncaught exception", exc_info=True)
-            self.running = False
-            raise
-
-    def stop(self):
-        """
-        Stop the state machine if it is running
-        """
-        self.running = False
-
 mdb_logger = logging.getLogger("mdb")
 
 class MdbStm(object):
@@ -192,11 +90,7 @@ class MdbStm(object):
     STATE_DISABLED = "__disabled"
     STATE_ENABLED = "__enabled"
     STATE_SESSION_IDLE = "__session_idle"
-
-    DISPENSE_NONE = None
-    DISPENSE_ALLOWED = "__allowed"
-    DISPENSE_DENIED = "__denied"
-    DISPENSE_COMPLETED = "__completed"
+    STATE_SESSION_ENDING = "__session_ending"
 
     #
     # Misc codes
@@ -205,10 +99,10 @@ class MdbStm(object):
     ACK = fromhex('00')
 
 
-    def __init__(self, item_dispensed_handler):
+    def __init__(self, get_dispense_status, item_dispensed_handler):
         """
         Initialization.
-        
+
         :param item_dispensed_handler: must be a callable. It is called with an
             item's data whenever that item is dispensed.
         """
@@ -216,6 +110,7 @@ class MdbStm(object):
         self.state = self.STATE_INACTIVE
         self.config_data = self.maxmin_data = self.item_data = None
         self.dispense = self.DISPENSE_NONE
+        self.get_dispense_status = get_dispense_status
         self.item_dispensed_handler = item_dispensed_handler
         #self.display_update = None
 
@@ -225,33 +120,6 @@ class MdbStm(object):
         """
         mdb_logger.info("transitioning from %s to %s", self.state, state)
         self.state = state
-
-    def _set_dispense(self, dispense):
-        """
-        Internal method. Update dispense state.
-        """
-        if dispense is self.dispense:
-            mdb_logger.debug("no-op transitioning dispense from/to %s", dispense)
-        else:
-            mdb_logger.info("transitioning dispense from %s to %s", self.dispense, dispense)
-        self.dispense = dispense
-
-    def cancel_dispense(self):
-        if self.dispense is self.DISPENSE_COMPLETED:
-            return True
-        if self.dispense is not self.DISPENSE_NONE:
-            self._set_dispense(self.DISPENSE_DENIED)
-            return True
-        return False
-
-    def dispense(self, dispense):
-        if self.dispense is not self.DISPENSE_NONE:
-            mdb_logger.warn("got mdb.dispense() while dispense is %r" % self.dispense)
-            return
-        if dispense:
-            self.dispense = self.DISPENSE_ALLOWED
-        else:
-            self.dispense = self.DISPENSE_DENIED
 
     def is_command(self, data, command):
         """
@@ -302,18 +170,15 @@ class MdbStm(object):
                 self.response_data = self.RES_RESET
                 self._set_state(self.STATE_DISABLED)
 
-            elif (self.state is self.STATE_ENABLED and (
-                  self.dispense is self.DISPENSE_ALLOWED or self.dispense is self.DISPENSE_DENIED)):
+            elif (self.state is self.STATE_ENABLED and self.get_dispense_status() is not None):
+                # pending dispense request (may be true or false), begin session
                 self.response_data = self.RES_BEGIN_SESS + fromhex('FFFF')
                 self._set_state(self.STATE_SESSION_IDLE)
 
-            elif self.state is self.STATE_ENABLED and self.dispense is self.DISPENSE_COMPLETED:
-                mdb_logger.warning("detected dispense complete status while in enabled state")
-                self._set_dispense(self.DISPENSE_NONE)
-
-            elif (self.state is self.STATE_SESSION_IDLE and
-                  (self.dispense is self.DISPENSE_DENIED or self.dispense is self.DISPENSE_NONE)):
+            elif (self.state is self.STATE_SESSION_IDLE and self.get_dispense_status() is not True):
+                self.item_dispensed_handler(None)
                 self.response_data = self.RES_SESS_CANCEL_REQ
+                self._set_state(self.STATE_SESSION_ENDING)
 
             #elif self.state is self.STATE_ENABLED and self.display_update:
             #    self.response_data = self.RES_DISPLAY_REQ + fromhex('64') + self.display_update[0]
@@ -344,26 +209,31 @@ class MdbStm(object):
             self.item_data = data[len(self.CMD_VEND_REQUEST):]
             mdb_logger.info("vend request item data: %s", tohex(self.item_data))
 
-            if self.dispense is self.DISPENSE_ALLOWED:
+            dispense = self.get_dispense_status()
+            if self.state is not self.STATE_SESSION_IDLE:
+                # this should not happen according to mdb protocol
+                mdb_logger.warning("got vend request outside state session_idle")
+                self.response_data = self.RES_VEND_DENIED
+            elif dispense is True:
                 mdb_logger.info("dispense allowed")
                 self.response_data = self.RES_VEND_APPROVED + fromhex('FFFF') # electronic token
-            elif self.dispense is self.DISPENSE_DENIED:
+            elif dispense is False:
                 mdb_logger.info("dispense denied")
                 self.response_data = self.RES_VEND_DENIED
             else:
-                mdb_logger.warn("got vend_request with dispense == %r", self.dispense)
+                mdb_logger.warn("got vend_request with dispense == %r", dispense)
                 self.response_data = self.RES_VEND_DENIED
-            self._set_dispense(self.DISPENSE_COMPLETED)
+            self._set_state(self.STATE_SESSION_ENDING)
 
         elif self.is_command(data, self.CMD_VEND_CANCEL):
             mdb_logger.warn("dispense canceled")
-            self._set_dispense(self.DISPENSE_COMPLETED)
+            self._set_state(self.STATE_SESSION_ENDING)
             self.response_data = self.RES_VEND_DENIED
 
         elif self.is_command(data, self.CMD_VEND_SUCCESS):
-            if self.dispense is not self.DISPENSE_COMPLETED:
-                mdb_logger.warning("got CMD_VEND_SUCCESS but dispense is %r" % self.dispense)
-                self._set_dispense(self.DISPENSE_COMPLETED)
+            if self.state is not self.STATE_SESSION_ENDING:
+                mdb_logger.warning("got CMD_VEND_SUCCESS in state %r" % self.state)
+                self._set_state(self.STATE_SESSION_ENDING)
             self.item_data = data[len(self.CMD_VEND_SUCCESS):]
             mdb_logger.info("vend succes item data: %s", tohex(self.item_data))
             try:
@@ -374,15 +244,18 @@ class MdbStm(object):
             self.response_data = self.RES_END_SESSION
 
         elif self.is_command(data, self.CMD_VEND_FAILURE):
-            if self.dispense is not self.DISPENSE_COMPLETED:
-                mdb_logger.warning("got CMD_VEND_FAILURE but dispense is %r" % self.dispense)
-                self._set_dispense(self.DISPENSE_COMPLETED)
+            if self.state is not self.STATE_SESSION_ENDING:
+                mdb_logger.warning("got CMD_VEND_FAILURE in state %r" % self.state)
+                self._set_state(self.STATE_SESSION_ENDING)
             mdb_logger.warn("dispense failed")
+            self.item_dispensed_handler(None)
             self.response_data = self.RES_END_SESSION
 
         elif self.is_command(data, self.CMD_VEND_SESS_COMPLETE):
+            if self.state is not self.STATE_SESSION_ENDING:
+                mdb_logger.warning("got CMD_VEND_SESS_COMPLETE in state %r" % self.state)
+            self.item_dispensed_handler(None)
             self.response_data = self.RES_END_SESSION
-            self._set_dispense(self.DISPENSE_NONE)
             self._set_state(self.STATE_ENABLED)
 
         # not handled: CASH SALE
@@ -390,13 +263,11 @@ class MdbStm(object):
         elif self.is_command(data, self.CMD_READER_DISABLE):
             if self.state is not self.STATE_ENABLED:
                 logging.warn("got disable while in state %s", self.state)
-            self._set_dispense(self.DISPENSE_NONE)
             self._set_state(self.STATE_DISABLED)
 
         elif self.is_command(data, self.CMD_READER_ENABLE):
-            if (self.state is not self.STATE_DISABLED):
+            if self.state is not self.STATE_DISABLED:
                 logging.warn("got enable while in state %s", self.state)
-            self._set_dispense(self.DISPENSE_NONE)
             self._set_state(self.STATE_ENABLED)
 
         elif self.is_command(data, self.CMD_READER_CANCEL):
