@@ -82,6 +82,7 @@ class System(object):
         self.reset_timer = None
         self.legi_enable = legi_enable or fromhex(get_config().get('legi', 'enable'))
         self.legi_info = None
+        self.dispense_permitted = None
 
         logging.basicConfig(filename='output.txt', level=logging.INFO)
 
@@ -96,7 +97,7 @@ class System(object):
             self.serial.connect()
 
         if self.mdb is None:
-            self.mdb = mdb.MdbStm(self._handle_dispense)
+            self.mdb = mdb.MdbStm(self._get_dispense_state, self._handle_dispense)
 
         if self.trans is None:
             self.trans = translator.TranslatorStm(self.serial, self.mdb.received_data)
@@ -151,7 +152,7 @@ class System(object):
         self.dispense()
 
     def _handle_dispense(self, itemdata):
-        system_logger.debug("handling dispense %s", tohex(itemdata))
+        system_logger.debug("handling dispense %s", (tohex(itemdata) if itemdata else itemdata))
         self.dispense(None)
         if itemdata is None:
             # dispense denied/cancelled
