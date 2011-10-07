@@ -56,28 +56,33 @@ def main(args=None):
     s.start()
     while True:
         try:
-            attr = raw_input(">> ")
+            try:
+                # python2
+                attr = raw_input(">> ")
+            except NameError:
+                # python3
+                attr = input(">> ")
         except EOFError:
-            print
+            print('')
             break
 
         try:
             if attr == "help":
-                print '\t'.join(a for a in dir(s) if not a.startswith('_'))
+                print('\t'.join(a for a in dir(s) if not a.startswith('_')))
                 continue
 
             if attr.startswith('_') or not hasattr(s, attr):
-                print "No such attribute"
+                print("No such attribute")
                 continue
             value = getattr(s, attr)
 
             if not callable(value):
-                print value
+                print(value)
                 continue
 
             res = value()
             if res is not None:
-                print repr(res)
+                print(repr(res))
         except Exception:
             import traceback
             traceback.print_exc()

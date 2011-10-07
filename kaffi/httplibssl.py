@@ -4,13 +4,18 @@ from __future__ import absolute_import
 
 import socket
 import ssl
-import httplib
+try:
+    # python3
+    from http.client import HTTPSConnection
+except ImportError:
+    # python2
+    from httplib import HTTPSConnection
 
-class HTTPSClientAuthConnection(httplib.HTTPSConnection):
+class HTTPSClientAuthConnection(HTTPSConnection):
     """ Class to make a HTTPS connection, with support for full client-based SSL Authentication"""
 
     def __init__(self, host, port, key_file, cert_file, ca_file, timeout=None):
-        httplib.HTTPSConnection.__init__(self, host, key_file=key_file, cert_file=cert_file)
+        HTTPSConnection.__init__(self, host, key_file=key_file, cert_file=cert_file)
         self.key_file = key_file
         self.cert_file = cert_file
         self.ca_file = ca_file
@@ -38,14 +43,14 @@ if __name__ == '__main__':
     # Little test-case of our class
     import sys
     if len(sys.argv) != 6:
-        print 'usage: python https_auth_handler.py host port key_file cert_file ca_file'
+        print('usage: python https_auth_handler.py host port key_file cert_file ca_file')
         sys.exit(1)
     else:
         host, port, key_file, cert_file, ca_file = sys.argv[1:]
     conn = HTTPSClientAuthConnection(host, port, key_file=key_file, cert_file=cert_file, ca_file=ca_file)
     conn.request('GET', '/')
     response = conn.getresponse()
-    print response.status, response.reason
+    print(response.status+' '+response.reason)
     data = response.read()
-    print data
+    print(data)
     conn.close()

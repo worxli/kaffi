@@ -21,9 +21,14 @@ config_dirs = ['/etc/kaffi', '/etc/vis/kaffi', '~/.config/kaffi', '~/.config/vis
 def get_config():
     global config
     if not config:
-        import ConfigParser
+        try:
+            # python3
+            import configparser
+        except ImportError:
+            # python2
+            import ConfigParser as configparser
         import os, os.path
-        _config = ConfigParser.RawConfigParser()
+        _config = configparser.RawConfigParser()
         if _config.read([os.path.expanduser(p) for p in config_dirs]):
             config = _config
         else:
@@ -122,7 +127,7 @@ class System(object):
     def stop(self):
         system_logger.info("stopping")
         if self.mdb:
-            for i in xrange(20):
+            for i in range(20):
                 self.mdb.dispense_permitted = None
                 if self.mdb.state != self.mdb.STATE_SESSION_IDLE:
                     break
@@ -146,7 +151,7 @@ class System(object):
             sqllogging.log_msg('DENIED', leginr)
             return
 
-        for i in xrange(10):
+        for i in range(10):
             if self.dispense_permitted is None:
                 break
             time.sleep(0.1)

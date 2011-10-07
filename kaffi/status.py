@@ -16,7 +16,7 @@ org_handlers = ordereddict.OrderedDict([
 status_logger = logging.getLogger("status")
 
 def check_legi(leginr):
-    for org, handlers in org_handlers.iteritems():
+    for org, handlers in org_handlers.items():
         try:
             status = handlers[0](leginr)
         except Exception:

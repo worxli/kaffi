@@ -2,8 +2,21 @@
 from __future__ import absolute_import
 
 import logging
-import urllib2
 import re
+try:
+    # python3
+    from urllib.error import HTTPError
+    from urllib.parse import urlsplit
+except ImportError:
+    # python2
+    from urllib2 import HTTPError
+    from urlparse import urlsplit
+try:
+    # python3
+    from http.client import HTTPConnection, HTTPSConnection
+except ImportError:
+    # python2
+    from httplib import HTTPConnection, HTTPSConnection
 try:
     import json
 except ImportError:
@@ -42,7 +55,6 @@ def request_url(url, method, body=None, headers=None):
 
     if '//' not in url:
         url = 'https://'+url
-    from urlparse import urlsplit
     o = urlsplit(url)
 
     if o.scheme == 'https':
@@ -54,11 +66,9 @@ def request_url(url, method, body=None, headers=None):
 
         from . import httplibssl
         c = httplibssl.HTTPSClientAuthConnection(o.hostname, int(o.port or 443), key_file, cert_file, ca_file)
-        #import httplib
-        #c = httplib.HTTPSConnection(o.hostname, int(o.port or 443), key_file, cert_file)
+        #c = HTTPSConnection(o.hostname, int(o.port or 443), key_file, cert_file)
     else:
-        import httplib
-        c = httplib.HTTPConnection(o.hostname, int(o.port or 80))
+        c = HTTPConnection(o.hostname, int(o.port or 80))
 
     c.request(method, o.path + '?' + o.query, body, headers)
     response = c.getresponse()
@@ -108,4 +118,4 @@ def report_dispensed(rfidnr, item):
 
     response, data = post_url(dispense_url, dispense_data)
     if response.status != 200:
-        raise urllib2.HTTPError(dispense_url, response.status, response.reason, response.getheaders(), None)
+        raise HTTPError(dispense_url, response.status, response.reason, response.getheaders(), None)

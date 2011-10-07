@@ -7,11 +7,19 @@ from __future__ import absolute_import
 
 import hashlib, hmac
 import datetime
-import urllib
 try:
+    # python2.6+
     import json
 except ImportError:
+    # python2.5-
     import simplejson as json
+try:
+    # python3
+    from urllib.request import urlopen
+    from urllib.parse import urlencode
+except ImportError:
+    # python3
+    from urllib import urlopen, urlencode
 from operator import itemgetter
 import logging
 
@@ -37,10 +45,10 @@ class AmivID:
         :returns: string which can be put in the GET-request
         """
         sortedRequest = sorted(request, key=itemgetter(0))
-        encodeRequest = '%s?%s'%(item,urllib.urlencode(request))
-        signature = hmac.new(self.secretkey,encodeRequest,hashlib.sha256).hexdigest()
+        encodeRequest = '%s?%s'%(item, urlencode(request))
+        signature = hmac.new(self.secretkey, encodeRequest, hashlib.sha256).hexdigest()
         request.append(('signature', signature))
-        finalRequest = '%s?%s'%(item,urllib.urlencode(request))
+        finalRequest = '%s?%s'%(item, urlencode(request))
         return finalRequest
 
     def getUser(self,rfid):
@@ -55,10 +63,10 @@ class AmivID:
                    ('type', 'rfid')]
 
         #Add query & signature
-        finalRequest = self.__sign("%06d"%(rfid),request)
+        finalRequest = self.__sign("%06d"%(rfid), request)
 
         try:
-            userDict = json.load(urllib.urlopen(self.baseurl+finalRequest))
+            userDict = json.load(urlopen(self.baseurl+finalRequest))
         except ValueError as e:
             logger.error("Error in amivID.getUser(), %s", e)
         return userDict
@@ -76,7 +84,7 @@ class AmivID:
         finalRequest = self.__sign("%s/apps"%(username),request)
 
         try:
-            beerDict = json.load(urllib.urlopen(self.baseurl+finalRequest))
+            beerDict = json.load(urlopen(self.baseurl+finalRequest))
         except ValueError as e:
             logger.error("Error in amivID.getBeer(), %s", e)
         return beerDict

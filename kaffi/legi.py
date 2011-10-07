@@ -50,7 +50,7 @@ class LegiListener(object):
 def run():
 
     def print_(arg):
-        print arg
+        print(arg)
 
     logging.basicConfig(level=logging.DEBUG)
 

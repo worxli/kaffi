@@ -2,7 +2,12 @@
 from __future__ import absolute_import
 
 import logging
-import urllib
+try:
+    # python3
+    from urllib.request import urlopen
+except ImportError:
+    # python2
+    from urllib import urlopen
 try:
     import json
 except ImportError:
@@ -15,7 +20,7 @@ report_url = 'https://vmp.ethz.ch/coffee/vmp_coffee_billing.php?rfidnr=%(rfidnr)
 
 def get_status(rfid):
     url = status_url % dict(rfidnr=rfid)
-    res = urllib.urlopen(url)
+    res = urlopen(url)
     if res.getcode() == 404:
         return None
     elif res.getcode() != 200:
@@ -29,6 +34,6 @@ def report_dispensed(rfid, item):
     logger.info("dispensed %s for %s, VMP" % (item, rfid))
 
     url = report_url % dict(rfidnr=rfid, item=item)
-    res = urllib.urlopen(url)
+    res = urlopen(url)
     if res.getcode() != 200:
         logger.warn("vmp report url returned status %s" % res.getcode())
