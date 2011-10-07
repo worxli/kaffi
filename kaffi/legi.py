@@ -1,3 +1,5 @@
+#-*- coding: utf-8 -*-
+from __future__ import absolute_import
 
 import serial
 import binascii
@@ -52,7 +54,7 @@ def run():
 
     logging.basicConfig(level=logging.DEBUG)
 
-    from kaffi import get_config
+    from .system import get_config
     enable = fromhex(get_config().get('legi', 'enable'))
 
     s = serial.Serial('/dev/ttyS1', 38400, timeout=1)

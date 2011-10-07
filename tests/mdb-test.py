@@ -1,10 +1,12 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
 
 import unittest
 from mock import Mock
 import binascii
+import sys, os, os.path
 tohex = binascii.hexlify
 fromhex = binascii.unhexlify
-
 
 class MdbStmTests(unittest.TestCase):
     def assertResponse(self, value, res):
@@ -13,7 +15,7 @@ class MdbStmTests(unittest.TestCase):
         self.assertEqual(call_mock.call_args, (args, kwargs))
 
     def test_dispense_polledclose(self):
-        import mdb
+        from kaffi import mdb
         handler = Mock()
         stm = mdb.MdbStm(lambda: True, handler)
         stm._set_state(stm.STATE_ENABLED)
@@ -30,7 +32,7 @@ class MdbStmTests(unittest.TestCase):
         self.assertCalled(handler, None)
 
     def test_dispense_autoclose(self):
-        import mdb
+        from kaffi import mdb
         handler = Mock()
         stm = mdb.MdbStm(lambda: True, handler)
         stm._set_state(stm.STATE_ENABLED)
@@ -46,7 +48,7 @@ class MdbStmTests(unittest.TestCase):
         self.assertEqual(stm.state, stm.STATE_ENABLED)
 
     def test_nodispense_polledclose(self):
-        import mdb
+        from kaffi import mdb
         handler = Mock()
         stm = mdb.MdbStm(lambda: False, handler)
         stm._set_state(stm.STATE_ENABLED)
@@ -62,7 +64,7 @@ class MdbStmTests(unittest.TestCase):
         self.assertEqual(stm.state, stm.STATE_ENABLED)
 
     def test_nodispense_autoclose(self):
-        import mdb
+        from kaffi import mdb
         handler = Mock()
         stm = mdb.MdbStm(lambda: False, handler)
         stm._set_state(stm.STATE_ENABLED)
@@ -76,7 +78,7 @@ class MdbStmTests(unittest.TestCase):
         self.assertEqual(stm.state, stm.STATE_ENABLED)
 
     def test_changedispense_autoclose(self):
-        import mdb
+        from kaffi import mdb
         dispense = False
         handler = Mock()
         stm = mdb.MdbStm(lambda: dispense, handler)
@@ -92,7 +94,7 @@ class MdbStmTests(unittest.TestCase):
         self.assertEqual(stm.state, stm.STATE_ENABLED)
 
     def test_changedispense_polledclose(self):
-        import mdb
+        from kaffi import mdb
         dispense = False
         handler = Mock()
         stm = mdb.MdbStm(lambda: dispense, handler)
@@ -110,4 +112,5 @@ class MdbStmTests(unittest.TestCase):
         self.assertEqual(stm.state, stm.STATE_ENABLED)
 
 if __name__ == '__main__':
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     unittest.main()

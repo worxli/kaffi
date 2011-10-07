@@ -1,10 +1,11 @@
 import ordereddict
 import logging
-import urllib
 
-import visstatus
-import amivstatus
-import vmpstatus
+from . import (
+    visstatus,
+    amivstatus,
+    vmpstatus,
+)
 
 org_handlers = ordereddict.OrderedDict([
     ('VIS', (visstatus.get_status, visstatus.report_dispensed)),
@@ -26,7 +27,7 @@ def check_legi(leginr):
     return None
 
 def report_dispense(rfidnr, org, item):
-    import sqllogging
+    from . import sqllogging
     sqllogging.log_msg("DISPENSE", "%s:%s:%s" % (org, rfidnr, item))
 
     try:

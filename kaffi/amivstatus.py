@@ -1,5 +1,7 @@
+#-*- coding: utf-8 -*-
+from __future__ import absolute_import
 
-import amivid
+from kaffi import amivid
 import logging
 from sqlalchemy import sql, schema, create_engine
 
@@ -8,7 +10,7 @@ logger = logging.getLogger("status.amiv")
 nethz_cache = {}
 
 def get_status(rfidnr):
-    from kaffi import get_config
+    from .system import get_config
     config = get_config()
     aid = amivid.AmivID(
             config.get('amivid', 'apikey'),
@@ -29,7 +31,7 @@ def get_connection():
     global dbengine, bierlog, insert
 
     if not dbengine:
-        from kaffi import get_config
+        from .system import get_config
         config = get_config()
 
         db_uri = config.get('amivreport', 'db_uri')

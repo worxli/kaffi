@@ -1,17 +1,34 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 
 import logging
 import threading
 import serial
 import binascii
-import time, sys, signal
+import time
 
-import translator
-import mdb
-import legi
-import status
-import sqllogging
+from . import (
+    translator,
+    mdb,
+    legi,
+    status,
+    sqllogging,
+)
+
+config = None
+config_dirs = ['/etc/kaffi', '/etc/vis/kaffi', '~/.config/kaffi', '~/.config/vis/kaffi']
+def get_config():
+    global config
+    if not config:
+        import ConfigParser
+        import os, os.path
+        _config = ConfigParser.RawConfigParser()
+        if _config.read([os.path.expanduser(p) for p in config_dirs]):
+            config = _config
+        else:
+            raise ValueError("could not find config file")
+    return config
 
 tohex = binascii.hexlify
 fromhex = binascii.unhexlify
@@ -58,19 +75,6 @@ class SerialStream(object):
             self.connection.write(byte)
         else:
             raise ValueError("trying to write to closed stream")
-
-config = None
-def get_config():
-    global config
-    if not config:
-        import ConfigParser
-        import os, os.path
-        _config = ConfigParser.RawConfigParser()
-        if _config.read([os.path.expanduser(p) for p in ['/etc/kaffi', '/etc/vis/kaffi', '~/.config/kaffi', '~/.config/vis/kaffi']]):
-            config = _config
-        else:
-            raise ValueError("could not find config file")
-    return config
 
 system_logger = logging.getLogger("system")
 
@@ -139,7 +143,6 @@ class System(object):
         org = status.check_legi(leginr)
         if not org:
             self.dispense(False)
-            import sqllogging
             sqllogging.log_msg('DENIED', leginr)
             return
 
@@ -184,77 +187,3 @@ class System(object):
         if allow:
             self.reset_timer = threading.Timer(8, lambda: self.dispense(None))
             self.reset_timer.start()
-
-def main(args=None):
-    if args is None:
-        args = sys.argv
-
-    logging.basicConfig(filename='/root/output.txt', format="%(asctime)s|%(levelname)s|%(name)s|%(message)s", level=logging.INFO)
-    logging.info("setting up logging")
-
-    sqllogging.init()
-    sqllogger = sqllogging.SqlLogHandler(logging.WARNING)
-    logging.getLogger().addHandler(sqllogger)
-
-    logging.getLogger("system").setLevel(logging.INFO)
-    logging.getLogger("mdb").setLevel(logging.INFO)
-    logging.getLogger("translator").setLevel(logging.WARNING)
-    logging.getLogger("serial").setLevel(logging.WARNING)
-    logging.getLogger("legi").setLevel(logging.INFO)
-    logging.getLogger("status").setLevel(logging.INFO)
-
-    s = System()
-
-    oldsig = None
-    def stop_system(signum, frame):
-        s.stop()
-        time.sleep(1)
-        if oldsig not in (signal.SIG_IGN, signal.SIG_DFL):
-            oldsig(signum, frame)
-        else:
-            sys.exit(1)
-    oldsig = signal.signal(signal.SIGTERM, stop_system)
-
-    if "--daemon" in args:
-        s.start()
-        while True:
-            time.sleep(10)
-        return
-
-    s.start()
-    while True:
-        try:
-            attr = raw_input(">> ")
-        except EOFError:
-            print
-            break
-
-        try:
-            if attr == "help":
-                print '\t'.join(a for a in dir(s) if not a.startswith('_'))
-                continue
-
-            if attr.startswith('_') or not hasattr(s, attr):
-                print "No such attribute"
-                continue
-            value = getattr(s, attr)
-
-            if not callable(value):
-                print value
-                continue
-
-            res = value()
-            if res is not None:
-                print repr(res)
-        except Exception:
-            import traceback
-            traceback.print_exc()
-    s.stop()
-
-if __name__ == "__main__":
-    try:
-        sys.exit(main() or 0)
-    except Exception:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)

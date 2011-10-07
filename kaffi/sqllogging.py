@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
 
 from sqlalchemy import sql, schema, create_engine, exc
 import logging
@@ -13,7 +15,7 @@ reconnect_timer = None
 def init():
     global config
 
-    from kaffi import get_config
+    from .system import get_config
     config = get_config()
 
     fail_logger.propagate = False
@@ -50,7 +52,7 @@ def log_msg(msg_type, msg):
     try:
         ins = coffeelog_tbl.insert().values(type=msg_type, msg=msg)
         log_dbengine.execute(ins)
-    except Exception as e:
+    except Exception:
         fail_logger.error("failed to log msg %r: %r", msg_type, msg)
 
 class SqlLogHandler(logging.Handler):

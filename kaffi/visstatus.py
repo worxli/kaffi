@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+
 import logging
-import requests
-import urllib
 import urllib2
 import re
 try:
@@ -45,13 +46,13 @@ def request_url(url, method, body=None, headers=None):
     o = urlsplit(url)
 
     if o.scheme == 'https':
-        from kaffi import get_config
+        from .system import get_config
         config = get_config()
         key_file = config.get('visstatus', 'key_file')
         cert_file = config.get('visstatus', 'cert_file')
         ca_file = config.get('visstatus', 'ca_file') if config.has_option('visstatus', 'ca_file') else None
 
-        import httplibssl
+        from . import httplibssl
         c = httplibssl.HTTPSClientAuthConnection(o.hostname, int(o.port or 443), key_file, cert_file, ca_file)
         #import httplib
         #c = httplib.HTTPSConnection(o.hostname, int(o.port or 443), key_file, cert_file)
@@ -76,7 +77,7 @@ def post_url(url, data=None, headers=None):
 
 def get_status(rfid):
 
-    from kaffi import get_config
+    from .system import get_config
     config = get_config()
     status_url_fmt = config.get('visstatus', 'status_url')
 
@@ -95,7 +96,7 @@ def get_status(rfid):
     return status_result['coffees'] > 0
 
 def report_dispensed(rfidnr, item):
-    from kaffi import get_config
+    from .system import get_config
     config = get_config()
     logger.info("dispensed %s for %s, VIS", item, rfidnr)
 

@@ -1,4 +1,5 @@
 #-*- coding: utf-8 -*-
+from __future__ import absolute_import
 # from: http://code.activestate.com/recipes/577548-https-httplib-client-connection-with-certificate-v/
 
 import socket

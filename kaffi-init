@@ -14,11 +14,14 @@
 . /lib/lsb/init-functions
 
 PIDFILE=/var/run/kaffi.pid
+ROOTDIR=/opt/vis/kaffi
+START=${ROOTDIR}/kaffi/main.py
+LOGFILE=/var/log/kaffi.log
 
 case "$1" in
 	start)
 		log_daemon_msg "Starting Kaffi service" "kaffi"
-		env PYTHON_PATH=/root/kaffi start-stop-daemon --start --pidfile $PIDFILE --startas /root/kaffi/kaffi.py --background --make-pidfile -- --daemon
+		env PYTHON_PATH=$ROOTDIR start-stop-daemon --start --pidfile $PIDFILE --startas $START --background --make-pidfile -- --daemon --log $LOGFILE
 		log_end_msg $?
 		;;
 	stop)
