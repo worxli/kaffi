@@ -181,6 +181,14 @@ class System(object):
         return (self.mdb_thread is not None and self.mdb_thread.isAlive() or
                 self.legi_thread is not None and self.legi_thread.isAlive())
 
+    def _dispense_timeout(self):
+        try:
+            if self.dispense_permitted is not None:
+                system_logger.info("dispense timed out")
+            self.dispense(None)
+        except Exception:
+            system_logger.error("uncaught exception while handling dispense timeout", exc_info=True)
+
     def dispense(self, allow=True):
         if self.reset_timer:
             self.reset_timer.cancel()
@@ -190,5 +198,5 @@ class System(object):
                 self.start()
         self.dispense_permitted = allow
         if allow:
-            self.reset_timer = threading.Timer(8, lambda: self.dispense(None))
+            self.reset_timer = threading.Timer(8, self._dispense_timeout)
             self.reset_timer.start()
