@@ -22,7 +22,7 @@ def get_status(rfid):
         status = json.load(res)
         return status['status'] == 0
 
-def report_dispense(rfid, item):
+def report_dispensed(rfid, item):
     url = report_url % dict(rfidnr=rfid, item=item)
     res = urllib.urlopen(url)
     if res.getcode() != 200:
