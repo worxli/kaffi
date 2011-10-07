@@ -23,6 +23,8 @@ def get_status(rfid):
         return status['status'] == 0
 
 def report_dispensed(rfid, item):
+    logger.info("dispensed %s for %s, VMP" % (item, rfid))
+
     url = report_url % dict(rfidnr=rfid, item=item)
     res = urllib.urlopen(url)
     if res.getcode() != 200:
