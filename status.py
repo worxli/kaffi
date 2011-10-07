@@ -4,10 +4,12 @@ import urllib
 
 import visstatus
 import amivstatus
+import vmpstatus
 
 org_handlers = ordereddict.OrderedDict([
     ('VIS', (visstatus.get_status, visstatus.report_dispensed)),
     ('AMIV', (amivstatus.get_status, amivstatus.report_dispensed)),
+    ('VMP', (vmpstatus.get_status, vmpstatus.report_dispensed)),
 ])
 
 status_logger = logging.getLogger("status")
