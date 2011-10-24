@@ -9,7 +9,7 @@ fromhex = binascii.unhexlify
 
 mdb_logger = logging.getLogger("mdb")
 
-class MdbStm(object):
+class MdbL1Stm(object):
     """MDB state machine handler.
 
     :attribute dispense_permitted: Set to True to allow next vend request, False to
@@ -85,24 +85,13 @@ class MdbStm(object):
     RES_DIAGNOSTIC = fromhex('FF')
 
     #
-    # States
-    #
-
-    STATE_INACTIVE = "__inactive"
-    STATE_DISABLED = "__disabled"
-    STATE_ENABLED = "__enabled"
-    STATE_SESSION_IDLE = "__session_idle"
-    STATE_SESSION_DISPENSED = "__session_dispensed"
-    STATE_SESSION_ENDING = "__session_ending"
-
-    #
     # Misc codes
     #
 
     ACK = fromhex('00')
 
 
-    def __init__(self, get_dispense_status, item_dispensed_handler):
+    def __init__(self, get_dispense_status, item_dispensed_handler, denied_dispense_handler):
         """
         Initialization.
 
@@ -110,18 +99,17 @@ class MdbStm(object):
             item's data whenever that item is dispensed.
         """
         self.response_data = ""
-        self.state = self.STATE_INACTIVE
+        self.state = self.st_inactive
         self.config_data = self.maxmin_data = self.item_data = None
-        #self.dispense = self.DISPENSE_NONE
         self.get_dispense_status = get_dispense_status
         self.item_dispensed_handler = item_dispensed_handler
-        #self.display_update = None
+        self.denied_dispense_handler = denied_dispense_handler
 
     def _set_state(self, state):
         """
         Internal method. Update internal state.
         """
-        mdb_logger.info("transitioning from %s to %s", self.state, state)
+        mdb_logger.info("transitioning from %s to %s", self.state.__name__, state.__name__)
         self.state = state
 
     def is_command(self, data, command):
@@ -130,6 +118,10 @@ class MdbStm(object):
         """
         # First MDB command byte (main command) may be offset by 50 (subcommand remains the same)
         return data[0] in (command[0], chr(ord(command[0])+50)) and data[1:len(command[1:])+1] == command[1:]
+
+    def reset(self):
+        self.current_dispense = None
+        self._set_state(self.st_inactive)
 
     def received_data(self, data):
         """
@@ -145,8 +137,9 @@ class MdbStm(object):
         else:
             mdb_logger.info("got message %s", tohex(data))
 
-        self._handle(data)
-        data_to_send = self.response_data
+        self.response_data = ""
+        result = self.state(data)
+        data_to_send = self.response_data or result or ""
         self.response_data = ""
         data_to_send = self.ACK + data_to_send
 
@@ -155,51 +148,15 @@ class MdbStm(object):
 
         return data_to_send
 
-    def _handle(self, data):
+    def st_inactive(self, data):
         """
-        Internal handler for pre-processed received data.
+        Inactive state, expecting setup data or an enable command
         """
-
-        # These commands handler are listed approximately in the same order as
-        # in the MDB specification.
-
-        if self.is_command(data, self.CMD_RESET):
-            self._set_state(self.STATE_INACTIVE)
-            self.config_data = self.maxmin_data = self.item_data = None
-
-        elif self.is_command(data, self.CMD_POLL):
-            if self.state is self.STATE_INACTIVE:
-                self.response_data = self.RES_RESET
-                self._set_state(self.STATE_DISABLED)
-
-            elif (self.state is self.STATE_ENABLED and self.get_dispense_status() is not None):
-                # pending dispense request (may be true or false), begin session
-                self.response_data = self.RES_BEGIN_SESS + fromhex('FFFF')
-                self._set_state(self.STATE_SESSION_IDLE)
-
-            elif (self.state is self.STATE_SESSION_IDLE and self.get_dispense_status() is not True):
-                self.item_dispensed_handler(None)
-                self.response_data = self.RES_SESS_CANCEL_REQ
-                self._set_state(self.STATE_SESSION_ENDING)
-
-            elif (self.state is self.STATE_SESSION_ENDING):
-                self.item_dispensed_handler(None)
-                self.response_data = self.RES_SESS_CANCEL_REQ
-                self._set_state(self.STATE_SESSION_ENDING)
-
-            #elif self.state is self.STATE_ENABLED and self.display_update:
-            #    self.response_data = self.RES_DISPLAY_REQ + fromhex('64') + self.display_update[0]
-            #    self.display_update = None
+        if self.is_command(data, self.CMD_POLL):
+            return self.RES_RESET
 
         elif self.is_command(data, self.CMD_SETUP_CONF_DATA):
-            if self.state == self.STATE_ENABLED:
-                # WORKAROUND: sometimes after a dispense the machine starts
-                # flooding setup conf data cmds.
-                mdb_logger.warning("got setup conf data in enabled state, sending malfunction")
-                self.response_data = self.RES_MALFUNCTION
-                return
-            self.config_data = data[len(self.CMD_SETUP_CONF_DATA):]
-            self.response_data = ''.join([
+            return ''.join([
                 self.RES_READER_CONF_DATA,
                 fromhex('01'), # feature level
                 fromhex('0001'), # US dollars... CHF -> 1756?
@@ -211,81 +168,10 @@ class MdbStm(object):
 
         elif self.is_command(data, self.CMD_SETUP_MAXMIN_PRICE):
             self.maxmin_data = data[len(self.CMD_SETUP_MAXMIN_PRICE):]
-
-        elif self.is_command(data, self.CMD_VEND_REQUEST):
-            self.item_data = data[len(self.CMD_VEND_REQUEST):]
-            mdb_logger.info("vend request item data: %s", tohex(self.item_data))
-
-            dispense = self.get_dispense_status()
-            if self.state is not self.STATE_SESSION_IDLE:
-                # this should not happen according to mdb protocol
-                mdb_logger.warning("got vend request outside state session_idle")
-                self.response_data = self.RES_VEND_DENIED
-                self._set_state(self.STATE_SESSION_ENDING)
-            elif dispense is True:
-                mdb_logger.info("dispense allowed")
-                self.response_data = self.RES_VEND_APPROVED + fromhex('FFFF') # electronic token
-                self._set_state(self.STATE_SESSION_DISPENSED)
-            elif dispense is False:
-                mdb_logger.info("dispense denied")
-                self.response_data = self.RES_VEND_DENIED
-                self._set_state(self.STATE_SESSION_ENDING)
-            else:
-                mdb_logger.warn("got vend_request with dispense == %r", dispense)
-                self.response_data = self.RES_VEND_DENIED
-                self._set_state(self.STATE_SESSION_ENDING)
-
-        elif self.is_command(data, self.CMD_VEND_CANCEL):
-            mdb_logger.warn("dispense canceled")
-            self._set_state(self.STATE_SESSION_ENDING)
-            self.response_data = self.RES_VEND_DENIED
-
-        elif self.is_command(data, self.CMD_VEND_SUCCESS):
-            if self.state is not self.STATE_SESSION_DISPENSED:
-                mdb_logger.warning("got CMD_VEND_SUCCESS in state %r" % self.state)
-            self._set_state(self.STATE_SESSION_ENDING)
-            self.item_data = data[len(self.CMD_VEND_SUCCESS):]
-            mdb_logger.info("vend succes item data: %s", tohex(self.item_data))
-            try:
-                self.item_dispensed_handler(self.item_data)
-            except Exception:
-                mdb_logger.error("caught exception while handling dispense with itemdata %s",
-                        tohex(self.item_data), exc_info=True)
-
-        elif self.is_command(data, self.CMD_VEND_FAILURE):
-            if self.state is not self.STATE_SESSION_DISPENSED:
-                mdb_logger.warning("got CMD_VEND_FAILURE in state %r" % self.state)
-            self._set_state(self.STATE_SESSION_ENDING)
-            mdb_logger.warn("dispense failed")
-            self.item_dispensed_handler(None)
-
-        elif self.is_command(data, self.CMD_VEND_SESS_COMPLETE):
-            if self.state is not self.STATE_SESSION_ENDING:
-                mdb_logger.warning("got CMD_VEND_SESS_COMPLETE in state %r" % self.state)
-            self.item_dispensed_handler(None)
-            self.response_data = self.RES_END_SESSION
-            self._set_state(self.STATE_ENABLED)
-
-        # not handled: CASH SALE
-
-        elif self.is_command(data, self.CMD_READER_DISABLE):
-            if self.state is not self.STATE_ENABLED:
-                logging.warn("got disable while in state %s", self.state)
-            self._set_state(self.STATE_DISABLED)
-
-        elif self.is_command(data, self.CMD_READER_ENABLE):
-            if self.state is not self.STATE_DISABLED:
-                logging.warn("got enable while in state %s", self.state)
-            self._set_state(self.STATE_ENABLED)
-
-        elif self.is_command(data, self.CMD_READER_CANCEL):
-            self.response_data = self.RES_CANCELLED
-
-        elif self.is_command(data, self.CMD_REVALUE_REQUEST):
-            self.response_data = self.RES_REVALUE_DENIED
+            return
 
         elif self.is_command(data, self.CMD_EXP_REQUEST_ID):
-            self.response_data = ''.join([
+            return ''.join([
                 self.RES_PERIPHERAL_ID,
                 fromhex('414258'), # manufacturer code - ASCII
                 fromhex('202020202020202020202020'), # serial number - ASCII
@@ -293,8 +179,182 @@ class MdbStm(object):
                 fromhex('1531'), # software version - packed BCD
             ])
 
-        # not handled: various extension commands
+        elif self.is_command(data, self.CMD_READER_ENABLE):
+            self._set_state(self.st_enabled)
+            return
 
         else:
-            mdb_logger.warning("unrecognized command "+tohex(data))
+            return self.RES_CMD_OUT_OF_SEQ
+
+    def st_disabled(self, data):
+        if self.is_command(data, self.CMD_POLL):
+            return
+
+        elif self.is_command(data, self.CMD_RESET):
+            self.reset()
+            return
+
+        elif self.is_command(data, self.CMD_READER_ENABLE):
+            self._set_state(self.st_enabled)
+            return
+
+        else:
+            return self.RES_CMD_OUT_OF_SEQ
+
+    def st_enabled(self, data):
+        if self.is_command(data, self.CMD_POLL):
+            # check for dispense request
+            dispense = None
+            try:
+                dispense = self.get_dispense_status()
+            except Exception:
+                mdb_logger.error("caught exception from get_dispense_status", exc_info=True)
+
+            if dispense:
+                # mark dispense request as current dispens and transition to
+                # session state
+                self.current_dispense = dispense
+                self._set_state(self.st_session_idle)
+                return self.RES_BEGIN_SESS + fromhex('FFFF')
+
+            return
+
+        elif self.is_command(data, self.CMD_READER_DISABLE):
+            self._set_state(self.st_disabled)
+            return
+
+        elif self.is_command(data, self.CMD_READER_CANCEL):
+            return self.RES_CANCELLED
+
+        elif self.is_command(data, self.CMD_RESET):
+            self.reset()
+            return
+
+        else:
+            return self.RES_CMD_OUT_OF_SEQ
+
+    def _deny(self):
+        # report denied dispense
+        try:
+            self.denied_dispense_handler(self.current_dispense[1])
+        except Exception:
+            mdb_logger.error("caught exception in denied_dispense_handler", exc_info=True)
+        self._end_session()
+
+    def _end_session(self):
+        self.current_dispense = None
+        self._set_state(self.st_session_ending)
+
+    def st_session_idle(self, data):
+
+        if not self.current_dispense:
+            mdb_logger.warning("in state st_session_idle with empty current_dispense %s", self.current_dispense)
+
+        if self.is_command(data, self.CMD_POLL):
+            if not self.current_dispense:
+                # No pending dispense request, cancel session
+                self._end_session()
+                return self.RES_SESS_CANCEL_REQ
+
+            elif not self.current_dispense[0]:
+                # The current dispense request is a deny, so cancel the session
+                self._deny()
+                return self.RES_SESS_CANCEL_REQ
+
+            return
+
+        elif self.is_command(data, self.CMD_VEND_REQUEST):
+            self.item_data = data[len(self.CMD_VEND_REQUEST):]
+            mdb_logger.info("vend request item data: %s", tohex(self.item_data))
+
+            if not self.current_dispense:
+                mdb_logger.warning("got vend request without current_dispense data")
+                self._end_session()
+                return self.RES_VEND_DENIED
+
+            else:
+                # determine if a coffee should be dispensed for the current request
+                allowed = bool(self.current_dispense and self.current_dispense[0])
+
+                if allowed:
+                    # approve dispense
+                    self._set_state(self.st_vend)
+                    return self.RES_VEND_APPROVED + fromhex('FFFF')
+
+                else:
+                    self._deny()
+                    return self.RES_VEND_DENIED
+
+        elif self.is_command(data, self.CMD_VEND_SESS_COMPLETE):
+            # reset current_dispense and return to enabled state
+            if self.current_dispense:
+                mdb_logger.warning("got session_complete with nonempty current_dispense")
+            self._end_session()
+            return self.RES_END_SESSION
+
+        elif self.is_command(data, self.CMD_RESET):
+            self.reset()
+            return
+
+        else:
+            return self.RES_CMD_OUT_OF_SEQ
+
+    def st_session_ending(self, data):
+        if self.is_command(data, self.CMD_POLL):
+            # XXX: is it really ok to immediately cancel the session?
+            return self.RES_SESS_CANCEL_REQ
+
+        elif self.is_command(data, self.CMD_VEND_SESS_COMPLETE):
+            self._set_state(self.st_enabled)
+            return self.RES_END_SESSION
+
+        elif self.is_command(data, self.CMD_VEND_REQUEST):
+            return self.RES_VEND_DENIED
+
+        elif self.is_command(data, self.CMD_VEND_CANCEL):
+            return self.RES_VEND_DENIED
+
+        elif self.is_command(data, self.CMD_VEND_SUCCESS):
+            mdb_logger.error("got vend_success in state session_ending")
+            return
+
+        elif self.is_command(data, self.CMD_RESET):
+            self.reset()
+            return
+
+        else:
+            return self.RES_CMD_OUT_OF_SEQ
+
+    def st_vend(self, data):
+        if self.is_command(data, self.CMD_POLL):
+            pass
+
+        elif self.is_command(data, self.CMD_VEND_FAILURE):
+            mdb_logger.warning("got vend_failure")
+            self._end_session()
+            return
+
+        elif self.is_command(data, self.CMD_VEND_CANCEL):
+            mdb_logger.warning("got vend_cancel")
+            self._end_session()
+            return self.RES_VEND_DENIED
+
+        elif self.is_command(data, self.CMD_VEND_SUCCESS):
+            self.item_data = data[len(self.CMD_VEND_SUCCESS):]
+            mdb_logger.info("vend succes item data: %s", tohex(self.item_data))
+
+            try:
+                self.item_dispensed_handler(self.current_dispense[1], self.item_data)
+            except Exception:
+                mdb_logger.error("caught exception while handling dispense %s with itemdata %s",
+                        self.current_dispense[1], tohex(self.item_data), exc_info=True)
+            self._end_session()
+            return
+
+        elif self.is_command(data, self.CMD_RESET):
+            self.reset()
+            return
+
+        else:
+            return self.RES_CMD_OUT_OF_SEQ
 

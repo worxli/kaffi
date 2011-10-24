@@ -106,7 +106,7 @@ class System(object):
             self.serial.connect()
 
         if self.mdb is None:
-            self.mdb = mdb.MdbStm(self._get_dispense_state, self._handle_dispense)
+            self.mdb = mdb.MdbL1Stm(self._get_dispense_state, self._handle_dispense, self._handle_denied)
 
         if self.trans is None:
             self.trans = translator.TranslatorStm(self.serial, self.mdb.received_data)
@@ -141,41 +141,47 @@ class System(object):
         sqllogging.stop_retrying()
 
     def _get_dispense_state(self):
-        return self.dispense_permitted
+            return None
+        return (self.dispense_permitted, self.legi_info)
 
     def _handle_legi(self, leginr):
-        system_logger.debug("handling legi %s", leginr)
+        system_logger.info("handling legi %s", leginr)
         org = status.check_legi(leginr)
         if not org:
-            self.dispense(False)
+            # deny dispense
+            self.dispense(False, legi_info)
             sqllogging.log_msg('DENIED', leginr)
             return
 
-        for i in range(10):
-            if self.dispense_permitted is None:
-                break
-            time.sleep(0.1)
-
-        self.legi_info = leginr, org
-        self.dispense()
-
-    def _handle_dispense(self, itemdata):
-        system_logger.debug("handling dispense %s", (tohex(itemdata) if itemdata else itemdata))
-        self.dispense(None)
-        if itemdata is None:
-            # dispense denied/cancelled
-            return
-        if self.legi_info is None:
-            system_logger.error("got dispense but legi_info is None")
         else:
-            legi_info = self.legi_info
-            self.legi_info = None
-            try:
-                item_number = int(tohex(itemdata), 16)
-                status.report_dispense(legi_info[0], legi_info[1], item_number)
-            except Exception:
-                system_logger.error("caught exception while reporting dispense for %r, itemdata %r",
-                        self.legi_info, itemdata, exc_info=True)
+            # wait for two seconds for a possibly running session to complete
+            for i in range(10):
+                if self.dispense_permitted is None:
+                    break
+                time.sleep(0.2)
+
+            self.dispense(True, legi_info)
+
+    def _handle_dispense(self, legi_info, itemdata):
+        """
+        Callback to handle a successful dispense.
+        """
+        system_logger.info("handling dispense %s for %s", (tohex(itemdata) if itemdata else itemdata), legi_info)
+
+        # reset dispense
+        self.dispense(None)
+
+        try:
+            item_number = int(tohex(itemdata), 16)
+            status.report_dispense(legi_info[0], legi_info[1], item_number)
+        except Exception:
+            system_logger.error("caught exception while reporting dispense for %r, itemdata %r",
+                                legi_info, itemdata, exc_info=True)
+
+    def _handle_denied(self, leginr):
+        system_logger.info("handling deny for %s", leginr)
+        # reset dispense
+        self.dispense(None)
 
     def is_running(self):
         return (self.mdb_thread is not None and self.mdb_thread.isAlive() or
@@ -189,14 +195,21 @@ class System(object):
         except Exception:
             system_logger.error("uncaught exception while handling dispense timeout", exc_info=True)
 
-    def dispense(self, allow=True):
+    def dispense(self, allow=True, legi_info=None):
+        # reset any running dispense timer
         if self.reset_timer:
             self.reset_timer.cancel()
             self.reset_timer = None
+
+        # make sure system is actually running
         if allow is not None:
             if not self.is_running():
                 self.start()
+
+        # set dispense data
+        self.legi_info = legi_info
         self.dispense_permitted = allow
         if allow:
+            # start timer if necessary
             self.reset_timer = threading.Timer(8, self._dispense_timeout)
             self.reset_timer.start()
