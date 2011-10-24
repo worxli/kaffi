@@ -146,10 +146,11 @@ class System(object):
         return (self.dispense_permitted, self.legi_info)
 
     def _handle_legi(self, leginr):
-        system_logger.info("handling legi %s", leginr)
+        system_logger.debug("handling legi %s", leginr)
 
         org = status.check_legi(leginr)
         legi_info = leginr, org
+        system_logger.debug("got org %s for legi %s", org, leginr)
 
         if not org:
             # deny dispense

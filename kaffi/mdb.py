@@ -261,6 +261,26 @@ class MdbL1Stm(object):
                 self._deny()
                 return self.RES_SESS_CANCEL_REQ
 
+            # check for changes to dispense request status
+            dispense = None
+            try:
+                dispense = self.get_dispense_status()
+            except Exception:
+                mdb_logger.error("caught exception from get_dispense_status", exc_info=True)
+
+            if self.current_dispense != dispense:
+                # The current dispense was cancelled or changed
+                self.current_dispense = dispense
+
+                # if new dispense status is to deny the dispense, do it now
+                if not self.current_dispense:
+                    self._end_session()
+                    return self.RES_SESS_CANCEL_REQ
+
+                elif not self.current_dispense[0]:
+                    self._deny()
+                    return self.RES_SESS_CANCEL_REQ
+
             return
 
         elif self.is_command(data, self.CMD_VEND_REQUEST):
@@ -289,7 +309,9 @@ class MdbL1Stm(object):
             # reset current_dispense and return to enabled state
             if self.current_dispense:
                 mdb_logger.warning("got session_complete with nonempty current_dispense")
-            self._end_session()
+                self.current_dispense = None
+
+            self._set_state(self.st_enabled)
             return self.RES_END_SESSION
 
         elif self.is_command(data, self.CMD_RESET):
