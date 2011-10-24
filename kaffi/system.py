@@ -141,17 +141,20 @@ class System(object):
         sqllogging.stop_retrying()
 
     def _get_dispense_state(self):
+        if self.dispense_permitted is None:
             return None
         return (self.dispense_permitted, self.legi_info)
 
     def _handle_legi(self, leginr):
         system_logger.info("handling legi %s", leginr)
+
         org = status.check_legi(leginr)
+        legi_info = leginr, org
+
         if not org:
             # deny dispense
             self.dispense(False, legi_info)
             sqllogging.log_msg('DENIED', leginr)
-            return
 
         else:
             # wait for two seconds for a possibly running session to complete
