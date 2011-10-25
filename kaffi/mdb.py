@@ -104,12 +104,19 @@ class MdbL1Stm(object):
         self.get_dispense_status = get_dispense_status
         self.item_dispensed_handler = item_dispensed_handler
         self.denied_dispense_handler = denied_dispense_handler
+        self.send_reset = True
 
     def _set_state(self, state):
         """
         Internal method. Update internal state.
         """
         mdb_logger.info("transitioning from %s to %s", self.state.__name__, state.__name__)
+
+        # run "entry" method if present
+        name = state.__name__
+        if hasattr(self, 'enter_'+name):
+            getattr(self, 'enter_'+name)()
+
         self.state = state
 
     def is_command(self, data, command):
@@ -118,10 +125,6 @@ class MdbL1Stm(object):
         """
         # First MDB command byte (main command) may be offset by 50 (subcommand remains the same)
         return data[0] in (command[0], chr(ord(command[0])+50)) and data[1:len(command[1:])+1] == command[1:]
-
-    def reset(self):
-        self.current_dispense = None
-        self._set_state(self.st_inactive)
 
     def _out_of_sequence(self, data):
         mdb_logger.error("out-of-sequence command %s in state %s with current_dispense %r",
@@ -152,12 +155,18 @@ class MdbL1Stm(object):
 
         return data_to_send
 
+    def _enter_st_inactive(self):
+        self.current_dispense = None
+        self.send_reset = True
+
     def st_inactive(self, data):
         """
         Inactive state, expecting setup data or an enable command
         """
         if self.is_command(data, self.CMD_POLL):
-            return self.RES_RESET
+            if self.send_reset:
+                self.send_reset = False
+                return self.RES_RESET
 
         elif self.is_command(data, self.CMD_SETUP_CONF_DATA):
             return ''.join([
@@ -188,7 +197,7 @@ class MdbL1Stm(object):
             return
 
         elif self.is_command(data, self.CMD_RESET):
-            self.reset()
+            self._set_state(self.st_inactive)
             return
 
         else:
@@ -203,7 +212,7 @@ class MdbL1Stm(object):
             return
 
         elif self.is_command(data, self.CMD_RESET):
-            self.reset()
+            self._set_state(self.st_inactive)
             return
 
         elif self.is_command(data, self.CMD_READER_ENABLE):
@@ -245,7 +254,7 @@ class MdbL1Stm(object):
             return self.RES_CANCELLED
 
         elif self.is_command(data, self.CMD_RESET):
-            self.reset()
+            self._set_state(self.st_inactive)
             return
 
         else:
@@ -257,11 +266,6 @@ class MdbL1Stm(object):
             self.denied_dispense_handler(self.current_dispense[1])
         except Exception:
             mdb_logger.error("caught exception in denied_dispense_handler", exc_info=True)
-        self._end_session()
-
-    def _end_session(self):
-        """Reset dispense state and end session"""
-        self.current_dispense = None
         self._set_state(self.st_session_ending)
 
     def st_session_idle(self, data):
@@ -278,7 +282,7 @@ class MdbL1Stm(object):
         if self.is_command(data, self.CMD_POLL):
             if not self.current_dispense:
                 # No pending dispense request, cancel session
-                self._end_session()
+                self._set_state(self.st_session_ending)
                 return self.RES_SESS_CANCEL_REQ
 
             elif not self.current_dispense[0]:
@@ -299,7 +303,7 @@ class MdbL1Stm(object):
 
                 # if new dispense status is to deny the dispense, do it now
                 if not self.current_dispense:
-                    self._end_session()
+                    self._set_state(self.st_session_ending)
                     return self.RES_SESS_CANCEL_REQ
 
                 elif not self.current_dispense[0]:
@@ -316,7 +320,7 @@ class MdbL1Stm(object):
             if not self.current_dispense:
                 # no dispense notification
                 mdb_logger.warning("got vend request without current_dispense data")
-                self._end_session()
+                self._set_state(self.st_session_ending)
                 return self.RES_VEND_DENIED
 
             elif self.current_dispense[0]:
@@ -352,11 +356,14 @@ class MdbL1Stm(object):
             return self.RES_CANCELLED
 
         elif self.is_command(data, self.CMD_RESET):
-            self.reset()
+            self._set_state(self.st_inactive)
             return
 
         else:
             return self._out_of_sequence(data)
+
+    def enter_st_session_ending(self):
+        self.current_dispense = None
 
     def st_session_ending(self, data):
         """
@@ -391,7 +398,7 @@ class MdbL1Stm(object):
             return
 
         elif self.is_command(data, self.CMD_RESET):
-            self.reset()
+            self._set_state(self.st_inactive)
             return
 
         else:
@@ -408,12 +415,12 @@ class MdbL1Stm(object):
 
         elif self.is_command(data, self.CMD_VEND_FAILURE):
             mdb_logger.warning("got vend_failure")
-            self._end_session()
+            self._set_state(self.st_session_ending)
             return
 
         elif self.is_command(data, self.CMD_VEND_CANCEL):
             mdb_logger.warning("got vend_cancel")
-            self._end_session()
+            self._set_state(self.st_session_ending)
             return self.RES_VEND_DENIED
 
         elif self.is_command(data, self.CMD_VEND_SUCCESS):
@@ -425,12 +432,12 @@ class MdbL1Stm(object):
             except Exception:
                 mdb_logger.error("caught exception while handling dispense %s with itemdata %s",
                         self.current_dispense[1], tohex(self.item_data), exc_info=True)
-            self._end_session()
+            self._set_state(self.st_session_ending)
             return
 
         elif self.is_command(data, self.CMD_RESET):
             mdb_logger.warning("got reset in st_vend with current_dispense %r", self.current_dispense)
-            self.reset()
+            self._set_state(self.st_inactive)
             return
 
         else:

@@ -37,6 +37,7 @@ class MdbL1StmEnabledTests(unittest.TestCase):
         self.assertResponse(res, self.stm.RES_SESS_CANCEL_REQ)
         res = self.stm.received_data(self.stm.CMD_VEND_SESS_COMPLETE)
         self.assertResponse(res, self.stm.RES_END_SESSION)
+        self.assertEqual(self.stm.current_dispense, None)
 
     def test_dispense_autoclose(self):
         self.status.return_value = (True, self.info_o)
@@ -51,6 +52,7 @@ class MdbL1StmEnabledTests(unittest.TestCase):
         res = self.stm.received_data(self.stm.CMD_VEND_SESS_COMPLETE)
         self.assertResponse(res, self.stm.RES_END_SESSION)
         self.assertEqual(self.stm.state, self.stm.st_enabled)
+        self.assertEqual(self.stm.current_dispense, None)
 
     def test_nodispense_polledclose(self):
         self.status.return_value = (False, self.info_o)
@@ -66,6 +68,7 @@ class MdbL1StmEnabledTests(unittest.TestCase):
         self.assertCalled(self.denied, self.info_o)
         #self.denied.mockCheckCall(self, 0, "__call__", None)
         self.assertEqual(self.stm.state, self.stm.st_enabled)
+        self.assertEqual(self.stm.current_dispense, None)
 
     def test_nodispense_autoclose(self):
         self.status.return_value = (False, self.info_o)
@@ -78,6 +81,7 @@ class MdbL1StmEnabledTests(unittest.TestCase):
         self.assertResponse(res, self.stm.RES_END_SESSION)
         self.assertCalled(self.denied, self.info_o)
         self.assertEqual(self.stm.state, self.stm.st_enabled)
+        self.assertEqual(self.stm.current_dispense, None)
 
     def test_changedispense_autoclose(self):
         self.status.return_value = (False, self.info_o)
@@ -91,6 +95,7 @@ class MdbL1StmEnabledTests(unittest.TestCase):
         self.assertCalled(self.denied, self.info_o)
         #self.denied.mockCheckCall(self, 0, "__call__", None)
         self.assertEqual(self.stm.state, self.stm.st_enabled)
+        self.assertEqual(self.stm.current_dispense, None)
 
     def test_changedispense_polledclose(self):
         self.status.return_value = (False, self.info_o)
@@ -106,6 +111,7 @@ class MdbL1StmEnabledTests(unittest.TestCase):
         self.assertCalled(self.denied, self.info_o)
         #self.denied.mockCheckCall(self, 0, "__call__", None)
         self.assertEqual(self.stm.state, self.stm.st_enabled)
+        self.assertEqual(self.stm.current_dispense, None)
 
 if __name__ == '__main__':
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
