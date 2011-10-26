@@ -27,8 +27,8 @@ def main(args=None):
     sqllogger = sqllogging.SqlLogHandler(logging.WARNING)
     logging.getLogger().addHandler(sqllogger)
 
-    logging.getLogger("system").setLevel(logging.INFO)
-    logging.getLogger("mdb").setLevel(logging.INFO)
+    logging.getLogger("system").setLevel(logging.DEBUG)
+    logging.getLogger("mdb").setLevel(logging.DEBUG)
     logging.getLogger("translator").setLevel(logging.WARNING)
     logging.getLogger("serial").setLevel(logging.WARNING)
     logging.getLogger("legi").setLevel(logging.INFO)

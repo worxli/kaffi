@@ -105,6 +105,7 @@ class MdbL1Stm(object):
         self.item_dispensed_handler = item_dispensed_handler
         self.denied_dispense_handler = denied_dispense_handler
         self.send_reset = True
+        self.current_dispense = None
 
     def _set_state(self, state):
         """
