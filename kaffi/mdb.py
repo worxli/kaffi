@@ -263,8 +263,11 @@ class MdbL1Stm(object):
         elif self.is_command(data, self.CMD_RESET):
             self._set_state(self.st_inactive)
             return
-
+        
         else:
+            if self.is_command(data, self.CMD_SETUP_CONF_DATA):
+                import time
+                time.sleep(.1)
             return self.default_handler(data)
 
     def _deny(self):
