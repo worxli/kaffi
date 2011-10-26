@@ -155,20 +155,8 @@ class MdbL1Stm(object):
 
         return data_to_send
 
-    def _enter_st_inactive(self):
-        self.current_dispense = None
-        self.send_reset = True
-
-    def st_inactive(self, data):
-        """
-        Inactive state, expecting setup data or an enable command
-        """
-        if self.is_command(data, self.CMD_POLL):
-            if self.send_reset:
-                self.send_reset = False
-                return self.RES_RESET
-
-        elif self.is_command(data, self.CMD_SETUP_CONF_DATA):
+    def default_handler(self, data):
+        if self.is_command(data, self.CMD_SETUP_CONF_DATA):
             return ''.join([
                 self.RES_READER_CONF_DATA,
                 fromhex('01'), # feature level
@@ -192,16 +180,34 @@ class MdbL1Stm(object):
                 fromhex('1531'), # software version - packed BCD
             ])
 
+        else:
+            return self._out_of_sequence(data)
+
+    def _enter_st_inactive(self):
+        self.current_dispense = None
+        self.send_reset = True
+
+    def st_inactive(self, data):
+        """
+        Inactive state, expecting setup data or an enable command
+        """
+        if self.is_command(data, self.CMD_POLL):
+            if self.send_reset:
+                self.send_reset = False
+                return self.RES_RESET
+
         elif self.is_command(data, self.CMD_READER_ENABLE):
             self._set_state(self.st_enabled)
             return
 
         elif self.is_command(data, self.CMD_RESET):
+            # set_state here despite already being in inactive state so enter
+            # method is executed.
             self._set_state(self.st_inactive)
             return
 
         else:
-            return self._out_of_sequence(data)
+            return self.default_handler(data)
 
     def st_disabled(self, data):
         """
@@ -220,7 +226,8 @@ class MdbL1Stm(object):
             return
 
         else:
-            return self._out_of_sequence(data)
+            return self.default_handler(data)
+
 
     def st_enabled(self, data):
         """
@@ -258,7 +265,7 @@ class MdbL1Stm(object):
             return
 
         else:
-            return self._out_of_sequence(data)
+            return self.default_handler(data)
 
     def _deny(self):
         """Report denied dispense and end session"""
