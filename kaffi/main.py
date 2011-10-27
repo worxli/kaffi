@@ -28,7 +28,7 @@ def main(args=None):
     logging.getLogger().addHandler(sqllogger)
 
     logging.getLogger("system").setLevel(logging.DEBUG)
-    logging.getLogger("mdb").setLevel(logging.DEBUG)
+    logging.getLogger("mdb").setLevel(logging.INFO)
     logging.getLogger("translator").setLevel(logging.WARNING)
     logging.getLogger("serial").setLevel(logging.WARNING)
     logging.getLogger("legi").setLevel(logging.INFO)
