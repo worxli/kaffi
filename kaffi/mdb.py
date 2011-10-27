@@ -106,6 +106,7 @@ class MdbL1Stm(object):
         self.denied_dispense_handler = denied_dispense_handler
         self.send_reset = True
         self.current_dispense = None
+        self.cancel_countdown = 0
 
     def _set_state(self, state):
         """
@@ -377,6 +378,7 @@ class MdbL1Stm(object):
 
     def enter_st_session_ending(self):
         self.current_dispense = None
+        self.cancel_countdown = 10
 
     def st_session_ending(self, data):
         """
@@ -386,8 +388,11 @@ class MdbL1Stm(object):
         """
 
         if self.is_command(data, self.CMD_POLL):
-            # XXX: is it really ok to immediately cancel the session?
-            return self.RES_SESS_CANCEL_REQ
+            if self.cancel_countdown > 0:
+                self.cancel_countdown -= 1
+            else:
+                # XXX: is it ok to cancel a session like this?
+                return self.RES_SESS_CANCEL_REQ
 
         elif self.is_command(data, self.CMD_VEND_SESS_COMPLETE):
             self._set_state(self.st_enabled)
