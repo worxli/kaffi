@@ -267,8 +267,10 @@ class MdbL1Stm(object):
         
         else:
             if self.is_command(data, self.CMD_SETUP_CONF_DATA):
-                import time
-                time.sleep(.1)
+                # WORKAROUND: sometimes after a dispense the machine starts
+                # flooding setup conf data cmds.
+                mdb_logger.warning("got setup conf data in enabled state, sending malfunction")
+                return self.RES_MALFUNCTION
             return self.default_handler(data)
 
     def _deny(self):
