@@ -220,7 +220,7 @@ class MdbL1Stm(object):
 
         elif self.is_command(data, self.CMD_RESET):
             self._set_state(self.st_inactive)
-            return
+            return self.RES_RESET
 
         elif self.is_command(data, self.CMD_READER_ENABLE):
             self._set_state(self.st_enabled)
@@ -263,7 +263,7 @@ class MdbL1Stm(object):
 
         elif self.is_command(data, self.CMD_RESET):
             self._set_state(self.st_inactive)
-            return
+            return self.RES_RESET
         
         else:
             if self.is_command(data, self.CMD_SETUP_CONF_DATA):
@@ -368,7 +368,7 @@ class MdbL1Stm(object):
 
         elif self.is_command(data, self.CMD_RESET):
             self._set_state(self.st_inactive)
-            return
+            return self.RES_RESET
 
         else:
             return self._out_of_sequence(data)
@@ -410,7 +410,7 @@ class MdbL1Stm(object):
 
         elif self.is_command(data, self.CMD_RESET):
             self._set_state(self.st_inactive)
-            return
+            return self.RES_RESET
 
         else:
             return self._out_of_sequence(data)
@@ -449,7 +449,7 @@ class MdbL1Stm(object):
         elif self.is_command(data, self.CMD_RESET):
             mdb_logger.warning("got reset in st_vend with current_dispense %r", self.current_dispense)
             self._set_state(self.st_inactive)
-            return
+            return self.RES_RESET
 
         else:
             return self._out_of_sequence(data)
