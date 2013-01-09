@@ -146,6 +146,13 @@ class System(object):
         return (self.dispense_permitted, self.legi_info)
 
     def _handle_legi(self, leginr):
+        system_logger.debug/"checking ampel status")
+        import .ampel
+        if not ampel.get_status():
+            # deny dispense
+            self.dispense(False, None)
+            sqllogging.log_msg('DENIED Ampel', leginr)
+
         system_logger.debug("handling legi %s", leginr)
 
         org = status.check_legi(leginr)
