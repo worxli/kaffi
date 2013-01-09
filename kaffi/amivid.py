@@ -66,10 +66,10 @@ class AmivID:
         finalRequest = self.__sign("%06d"%(rfid), request)
 
         try:
-            userDict = json.load(urlopen(self.baseurl+finalRequest))
+            return json.load(urlopen(self.baseurl+finalRequest))
         except ValueError as e:
             logger.error("Error in amivID.getUser(), %s", e)
-        return userDict
+        return None
 
     def getBeer(self,username):
         """Gets the Infos if a user may get a beer (and how many)
@@ -84,7 +84,8 @@ class AmivID:
         finalRequest = self.__sign("%s/apps"%(username),request)
 
         try:
-            beerDict = json.load(urlopen(self.baseurl+finalRequest))
+            return json.load(urlopen(self.baseurl+finalRequest))
         except ValueError as e:
             logger.error("Error in amivID.getBeer(), %s", e)
-        return beerDict
+        return None
+

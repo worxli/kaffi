@@ -3,6 +3,15 @@ from __future__ import absolute_import
 
 import binascii
 import logging
+import threading
+
+# email shit taken from snowdayz
+from email import Charset
+# without adding the utf-8+qp charset, utf-8 is always encoded base64
+Charset.add_charset('utf-8', Charset.QP, Charset.QP, 'utf-8')
+from email.mime.text import MIMEText
+from smtplib import SMTP
+RESPONSE_TIMEOUT = 5
 
 tohex = binascii.hexlify
 fromhex = binascii.unhexlify
@@ -107,6 +116,34 @@ class MdbL1Stm(object):
         self.send_reset = True
         self.current_dispense = None
         self.cancel_countdown = 0
+        self.response_timer = None
+
+    def _response_timeout(self):
+        mdb_logger.warning("no data received within %s seconds", RESPONSE_TIMEOUT)
+        text = "No data received within %s seconds\n" % RESPONSE_TIMEOUT
+        buf = ""
+        with open("/var/log/kaffi.log", "r") as f:
+            f.seek(0, 2) # end
+            while buf.count('\n') <= 10:
+                f.seek(-1024) # seek back
+                buf = f.read(1024) + buf # read
+                f.seek(-1024) # undo position change from read
+                if f.tell() == 0:
+                    break
+            while buf.count('\n') > 10:
+                buf = buf[buf.index('\n')+1:]
+        text += "log tail:\n"
+        text += buf
+        msg = MIMEText(message, 'plain', 'utf-8')
+        msg['Subject'] = "Kaffeemaschine receive timeout"
+        msg['From'] = 'root@kafi.vis.ethz.ch'
+        msg['To'] = 'nev@vis.ethz.ch'
+
+        s = SMTP('mail.vis.ethz.ch')
+        s.sendmail('root@kafi.vis.ethz.ch', 'nev@vis.ethz.ch', msg.as_string())
+        s.quit()
+
+
 
     def _set_state(self, state):
         """
@@ -131,7 +168,8 @@ class MdbL1Stm(object):
     def _out_of_sequence(self, data):
         mdb_logger.error("out-of-sequence command %s in state %s with current_dispense %r",
                          tohex(data), self.state.__name__, self.current_dispense)
-        return self.RES_CMD_OUT_OF_SEQ
+        #return self.RES_CMD_OUT_OF_SEQ
+        return self.RES_MALFUNCTION
 
     def received_data(self, data):
         """
@@ -141,6 +179,8 @@ class MdbL1Stm(object):
             data = data[1:]
         else:
             mdb_logger.warning("data does not start with ACK")
+        if self.response_timer:
+            self.response_timer.cancel()
 
         if data == self.CMD_POLL:
             mdb_logger.debug("got message %s", tohex(data))
@@ -155,6 +195,8 @@ class MdbL1Stm(object):
         if data_to_send != self.ACK:
             mdb_logger.info("sending message %s", tohex(data_to_send))
 
+        self.response_timer = threading.Timer(RESPONSE_TIMEOUT, self._response_timeout)
+        self.response_timer.start()
         return data_to_send
 
     def default_handler(self, data):
