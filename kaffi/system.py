@@ -90,6 +90,7 @@ class System(object):
         self.serial = self.trans = self.mdb = self.mdb_thread = None
         self.listener = self.legi_thread = None
         self.reset_timer = None
+        self.response_timer = None
         self.legi_enable = legi_enable or fromhex(get_config().get('legi', 'enable'))
         self.legi_info = None
         self.dispense_permitted = None
@@ -110,7 +111,9 @@ class System(object):
             self.mdb = mdb.MdbL1Stm(self._get_dispense_state, self._handle_dispense, self._handle_denied)
 
         if self.trans is None:
-            self.trans = translator.TranslatorStm(self.serial, self.mdb.received_data)
+            self.response_timer = translator.ResponseTimer(self.mdb.received_data)
+            self.response_tiemr.enabled = True
+            self.trans = translator.TranslatorStm(self.serial, self.response_timer)
 
         if self.listener is None:
             self.listener = legi.LegiListener(serial.Serial('/dev/ttyS1', 38400, timeout=1),

@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import binascii
 import logging
+import threading
 
 tohex = binascii.hexlify
 fromhex = binascii.unhexlify
@@ -108,4 +109,52 @@ class TranslatorStm(object):
         Stop the state machine if it is running
         """
         self.running = False
+
+# email shit taken from snowdayz
+from email import Charset
+# without adding the utf-8+qp charset, utf-8 is always encoded base64
+Charset.add_charset('utf-8', Charset.QP, Charset.QP, 'utf-8')
+from email.mime.text import MIMEText
+from smtplib import SMTP
+RESPONSE_TIMEOUT = 5
+
+class ResponseTimer(object):
+    def __init__(self, to_call, enable=False):
+        self.enabled = enable
+        self.timer = None
+        self.to_call = to_call
+
+    def _timeout(self):
+        logger.warning("no data received within %s seconds", RESPONSE_TIMEOUT)
+        text = "No data received within %s seconds\n" % RESPONSE_TIMEOUT
+        buf = ""
+        with open("/var/log/kaffi.log", "r") as f:
+            f.seek(0, 2) # end
+            while buf.count('\n') <= 10:
+                f.seek(-1024) # seek back
+                buf = f.read(1024) + buf # read
+                f.seek(-1024) # undo position change from read
+                if f.tell() == 0:
+                    break
+            while buf.count('\n') > 10:
+                buf = buf[buf.index('\n')+1:]
+        text += "log tail:\n"
+        text += buf
+        msg = MIMEText(text, 'plain', 'utf-8')
+        msg['Subject'] = "Kaffeemaschine receive timeout"
+        msg['From'] = 'root@kafi.vis.ethz.ch'
+        msg['To'] = 'nev@vis.ethz.ch'
+
+        s = SMTP('mail.vis.ethz.ch')
+        s.sendmail('root@kafi.vis.ethz.ch', 'nev@vis.ethz.ch', msg.as_string())
+        s.quit()
+
+    def __call__(self, *args, **kwargs):
+        if self.timer:
+            self.timer.cancel()
+        res = self.to_call(*args, **kwargs)
+        if self.enabled:
+            self.timer = threading.Timer(RESPONSE_TIMEOUT, self._timeout)
+            self.timer.start()
+        return res
 
