@@ -112,7 +112,7 @@ class System(object):
 
         if self.trans is None:
             self.response_timer = translator.ResponseTimer(self.mdb.received_data)
-            self.response_tiemr.enabled = True
+            self.response_timer.enabled = True
             self.trans = translator.TranslatorStm(self.serial, self.response_timer)
 
         if self.listener is None:
