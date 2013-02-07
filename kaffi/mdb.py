@@ -382,6 +382,8 @@ class MdbL1Stm(object):
             elif self.current_dispense[0]:
                 # approve dispense
                 self._set_state(self.st_vend)
+                # disable further dispense requests before session is complete
+                self.current_dispense = (False, self.current_dispense[1])
                 return self.RES_VEND_APPROVED + fromhex('FFFF')
 
             else:
