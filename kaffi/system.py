@@ -79,6 +79,7 @@ class SerialStream(object):
         serial_logger.info("writing %s", tohex(byte))
         if self.connection and self.connection.isOpen():
             self.connection.write(byte)
+            self.connection.flush()
         else:
             raise ValueError("trying to write to closed stream")
 
