@@ -28,11 +28,12 @@ def main(args=None):
     logging.getLogger().addHandler(sqllogger)
 
     logging.getLogger("system").setLevel(logging.DEBUG)
-    logging.getLogger("mdb").setLevel(logging.INFO)
-    logging.getLogger("translator").setLevel(logging.WARNING)
+    logging.getLogger("mdb").setLevel(logging.DEBUG)
+    logging.getLogger("translator").setLevel(logging.DEBUG)
     logging.getLogger("serial").setLevel(logging.WARNING)
     logging.getLogger("legi").setLevel(logging.INFO)
     logging.getLogger("status").setLevel(logging.INFO)
+    logging.getLogger("main").setLevel(logging.DEBUG)
 
     from .system import System
     s = System()
