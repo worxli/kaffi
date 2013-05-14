@@ -171,9 +171,9 @@ class System(object):
             self.mdb = mdb.MdbL1Stm()
 
         if self.trans is None:
-            self.response_timer = translator.ResponseTimer(self.mdb.received_data, self.mdb.received_nack)
+            self.response_timer = translator.ResponseTimer(self.mdb.received_data)
             self.response_timer.enabled = True
-            self.trans = translator.TranslatorStm(self.serial, self.response_timer)
+            self.trans = translator.TranslatorStm(self.serial, self.response_timer, self.mdb.received_nack)
 
         if self.main is None:
             self.main = Main(self.mdb)
