@@ -155,7 +155,8 @@ class MdbL1Stm(object):
 
         if data_to_send != self.ACK:
             mdb_logger.info("sending message %s", tohex(data_to_send))
-
+        else:
+            mdb_logger.debug("sending message %s", tohex(data_to_send))
         return data_to_send
 
     def default_handler(self, data):
