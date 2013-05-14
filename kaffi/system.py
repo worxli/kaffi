@@ -83,12 +83,71 @@ class SerialStream(object):
         else:
             raise ValueError("trying to write to closed stream")
 
+
+main_logger = logging.getLogger('main')
+
+class Main(object):
+
+    def __init__(self, mdb):
+        self._current_legi = None
+        self._legi_lock = threading.Condition()
+        self.mdb = mdb
+    
+    def _wait_for_legi(self):
+        with self._legi_lock:
+            while not self._current_legi:
+                self._legi_lock.wait()
+            legi = self._current_legi
+            self._current_legi = None
+            return legi
+    
+    def _legi_receiver(self,legi):
+        # runs on legi thread
+        with self._legi_lock:
+            self._current_legi = legi
+            self._legi_lock.notify()
+
+
+    def run(self):
+        while True:
+            try:
+                main_logger.info("waiting for legi")
+                leginr = self._wait_for_legi() # return current legi (may block)
+                
+                main_logger.info("checking ampel status")
+                if not ampelstatus.get_status():
+                    # deny dispense
+                    sqllogging.log_msg('DENIED Ampel', leginr)
+                    continue
+
+                main_logger.info("checking legi %s", leginr)
+                org = status.check_legi(leginr)
+                main_logger.info("got org %s for legi %s", org, leginr)
+
+                if not org:
+                    # deny dispense
+                    sqllogging.log_msg('DENIED', leginr)
+                else:
+                    main_logger.info("Waiting for dispense...")
+                    dispensed, itemdata = self.mdb.allow_one_and_wait()
+                    main_logger.info("Dispensed: %s, itemdata: %r", dispensed, itemdata)
+                    if dispensed:
+                        try:
+                            item_number = int(tohex(itemdata), 16)
+                            status.report_dispense(leginr, org, item_number)
+                        except Exception:
+                            system_logger.error("caught exception while reporting dispense for %r, itemdata %r",
+                                                (leginr, org), itemdata, exc_info=True)
+            except Exception:
+                main_logger.error("caught exception in main thread", exc_info=True)
+
+
 system_logger = logging.getLogger("system")
 
 class System(object):
 
     def __init__(self, legi_enable=None):
-        self.serial = self.trans = self.mdb = self.mdb_thread = None
+        self.serial = self.trans = self.mdb = self.mdb_thread = self.main = None
         self.listener = self.legi_thread = None
         self.reset_timer = None
         self.response_timer = None
@@ -109,16 +168,22 @@ class System(object):
             self.serial.connect()
 
         if self.mdb is None:
-            self.mdb = mdb.MdbL1Stm(self._get_dispense_state, self._handle_dispense, self._handle_denied)
+            self.mdb = mdb.MdbL1Stm()
 
         if self.trans is None:
-            self.response_timer = translator.ResponseTimer(self.mdb.received_data)
+            self.response_timer = translator.ResponseTimer(self.mdb.received_data, self.mdb.received_nack)
             self.response_timer.enabled = True
             self.trans = translator.TranslatorStm(self.serial, self.response_timer)
 
+        if self.main is None:
+            self.main = Main(self.mdb)
+
         if self.listener is None:
             self.listener = legi.LegiListener(serial.Serial('/dev/ttyS1', 38400, timeout=1),
-                    self.legi_enable, self._handle_legi)
+                    self.legi_enable, self.main._legi_receiver)
+
+        self.main_thread = threading.Thread(target=self.main.run)
+        self.main_thread.deamon = True
 
         self.mdb_thread = threading.Thread(target=self.trans.run)
         self.mdb_thread.daemon = True
@@ -126,6 +191,7 @@ class System(object):
         self.legi_thread = threading.Thread(target=self.listener.run)
         self.legi_thread.daemon = True
 
+        self.main_thread.start()
         self.mdb_thread.start()
         self.legi_thread.start()
 
@@ -143,6 +209,7 @@ class System(object):
             self.listener.stop()
         if self.reset_timer:
             self.reset_timer.cancel()
+        # todo: shutdown main thread
         sqllogging.stop_retrying()
 
     def _get_dispense_state(self):

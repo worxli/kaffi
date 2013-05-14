@@ -19,17 +19,19 @@ class TranslatorStm(object):
     ACK = '\x06'
     NAK = '\x15'
 
-    def __init__(self, serial_stream, handler):
+    def __init__(self, serial_stream, data_handler, nack_handler):
         """
         Initialize the Translator.
 
         :param serial_stream: object with read_byte() and write_bytes(bytes)
-        :param handler: callable that takes newly received data and responds
+        :param data_handler: callable that takes newly received data and responds
             with data to be sent
+        :param nack_andler: callable that will be called when a NACK is received
         """
         super(TranslatorStm, self).__init__()
         self.serial_stream = serial_stream
-        self.handler = handler
+        self.data_handler = data_handler
+        self.nack_handler = nack_handler
         self.state_fn = self._transaction_idle
         self.running = False
         self.received_data = ""
@@ -49,9 +51,9 @@ class TranslatorStm(object):
         Internal state handler. Current state is immediately after a DLE
         """
         if c == self.ETX:
-            # receive complete, forward to handler
+            # receive complete, forward to data_handler
             logger.info("received %s", tohex(self.received_data))
-            data = self.handler(self.received_data)
+            data = self.data_handler(self.received_data)
             self.received_data = ""
 
             # prepare to send data
@@ -83,9 +85,10 @@ class TranslatorStm(object):
         if c == self.STX:
             self.state_fn = self._transaction_running
         elif c == self.ACK:
-            pass
+            logger.info("es AK")
         elif c == self.NAK:
             logger.info("es NAK")
+            self.nack_handler()
         else:
             logger.warn("mega komisch: %s im idle" % tohex(c))
 
