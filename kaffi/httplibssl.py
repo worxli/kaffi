@@ -20,6 +20,7 @@ class HTTPSClientAuthConnection(HTTPSConnection):
         self.cert_file = cert_file
         self.ca_file = ca_file
         self.timeout = timeout
+        self.port = port
 
     def connect(self):
         """ Connect to a host on a given (SSL) port.
@@ -43,14 +44,15 @@ if __name__ == '__main__':
     # Little test-case of our class
     import sys
     if len(sys.argv) != 6:
-        print('usage: python https_auth_handler.py host port key_file cert_file ca_file')
+        print("""usage: python https_auth_handler.py host port key_file cert_file ca_file
+                 e.g.: python httplibssl.py api.vis.ethz.ch 4433 /etc/vis/kaffi.key /etc/vis/kaffi.crt /etc/vis/visapi.crt""")
         sys.exit(1)
     else:
         host, port, key_file, cert_file, ca_file = sys.argv[1:]
     conn = HTTPSClientAuthConnection(host, port, key_file=key_file, cert_file=cert_file, ca_file=ca_file)
-    conn.request('GET', '/')
+    conn.request('GET', '/coffee/status/046631@rfid.ethz.ch')
     response = conn.getresponse()
-    print(response.status+' '+response.reason)
+    print("%d, %s" % (response.status, response.reason))
     data = response.read()
     print(data)
     conn.close()
