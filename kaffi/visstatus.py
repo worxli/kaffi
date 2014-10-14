@@ -37,7 +37,7 @@ def get_json_from_response(response, data):
             pass
 
     content_type = headers['content-type']
-    m = re.match(r'^\s*(text/[^;]+);\s*charset=([a-zA-Z0-9-]+)\s*$', content_type)
+    m = re.match(r'^\s*([^;]+);\s*charset=([a-zA-Z0-9-]+)\s*$', content_type)
     if m:
         content_type, encoding = m.group(1).strip(), m.group(2)
     else:
