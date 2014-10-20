@@ -17,9 +17,12 @@ def get_status(rfidnr):
             config.get('amivid', 'secret'),
             config.get('amivid', 'baseurl'))
     user = aid.getUser(int(rfidnr))
-    if user:
-        nethz_cache[rfidnr] = user['nethz']
-        return int(user['apps']['kafi']) > 0
+    if user and isinstance(user, dict):
+        try:
+            nethz_cache[rfidnr] = user['nethz']
+            return int(user['apps']['kafi']) > 0
+        except KeyError:
+            return None
     return None
 
 metadata = schema.MetaData()

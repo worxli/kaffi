@@ -434,6 +434,7 @@ class MdbL1Stm(object):
 
         else:
             # Does not change state, sends malefunction, reset should come next.
-            # self._lock.release()
+            mdb_logger.warning("got out of sequence in st_vend (NOT releasing lock, will it deadlock)")
+            #self._lock.release()
             return self._out_of_sequence(data)
 

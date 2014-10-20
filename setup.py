@@ -3,5 +3,5 @@ setup(
       name = "Kaffi",
       version = "1.0.0",
       packages = find_packages(),
-      install_requires = ['SQLAlchemy', 'serial']
+      install_requires = ['SQLAlchemy', 'ordereddict', 'pyserial']
 )

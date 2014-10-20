@@ -53,15 +53,16 @@ class TranslatorStm(object):
         if c == self.ETX:
             # receive complete, forward to data_handler
             logger.info("received %s", tohex(self.received_data))
+            
+            # why send ack?
+            self.serial_stream.write_bytes(self.ACK)
+            
             data = self.data_handler(self.received_data)
             self.received_data = ""
 
             # prepare to send data
             logger.info("sending %s", tohex(data))
             data = data.replace(self.DLE, self.DLE + self.DLE)
-
-            # why send ack?
-            self.serial_stream.write_bytes(self.ACK)
 
             # wrap data in transaction
             self.serial_stream.write_bytes(self.STX + data + self.DLE + self.ETX)

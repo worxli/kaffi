@@ -123,7 +123,6 @@ class Main(object):
                 main_logger.info("checking legi %s", leginr)
                 org = status.check_legi(leginr)
                 main_logger.info("got org %s for legi %s", org, leginr)
-
                 if not org:
                     # deny dispense
                     sqllogging.log_msg('DENIED', leginr)
