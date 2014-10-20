@@ -12,12 +12,13 @@ fromhex = binascii.unhexlify
 def main(args=None):
     if args is None:
         args = sys.argv
-    log_args = dict(format="%(asctime)s|%(levelname)s|%(name)s|%(message)s", level=logging.INFO)
+    log_args = dict(format="%(asctime)s|%(levelname)s|%(name)s|%(message)s", level=logging.WARNING)
     try:
         i = args[::-1].index("--log")
         log_args['filename'] = args[len(args)-i]
     except ValueError:
         pass
+    log_args['level'] = logging.ERROR
 
     logging.basicConfig(**log_args)
     logging.info("setting up logging")
@@ -34,6 +35,14 @@ def main(args=None):
     logging.getLogger("legi").setLevel(logging.INFO)
     logging.getLogger("status").setLevel(logging.INFO)
     logging.getLogger("main").setLevel(logging.DEBUG)
+    # Make this thing STFU!
+    logging.getLogger("system").setLevel(logging.WARNING)
+    logging.getLogger("mdb").setLevel(logging.WARNING)
+    logging.getLogger("translator").setLevel(logging.WARNING)
+    logging.getLogger("serial").setLevel(logging.WARNING)
+    logging.getLogger("legi").setLevel(logging.WARNING)
+    logging.getLogger("status").setLevel(logging.WARNING)
+    logging.getLogger("main").setLevel(logging.WARNING)
 
     from .system import System
     s = System()
