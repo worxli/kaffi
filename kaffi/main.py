@@ -42,7 +42,7 @@ def main(args=None):
     logging.getLogger("serial").setLevel(logging.WARNING)
     logging.getLogger("legi").setLevel(logging.WARNING)
     logging.getLogger("status").setLevel(logging.WARNING)
-    logging.getLogger("main").setLevel(logging.WARNING)
+    logging.getLogger("main").setLevel(logging.INFO)
 
     from .system import System
     s = System()
