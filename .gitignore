@@ -1,0 +1,8 @@
+.hg
+Kaffi.egg-info
+foo
+kaffi/.swn
+kaffi/.swo
+kaffi/.swp
+*.pyc
+
