@@ -15,6 +15,7 @@ from . import (
     status,
     sqllogging,
     ampelstatus,
+    usb_ampel,
 )
 
 config = None
@@ -113,7 +114,6 @@ class Main(object):
             try:
                 main_logger.info("waiting for legi")
                 leginr = self._wait_for_legi() # return current legi (may block)
-                
                 main_logger.info("checking ampel status")
                 if not ampelstatus.get_status():
                     # deny dispense
@@ -157,11 +157,15 @@ class System(object):
         logging.basicConfig(filename='output.txt', level=logging.INFO)
 
     def start(self):
+        import threading
+        ampel_controller = threading.Thread(target=usb_ampel.ampel_controller)
+        ampel_controller.start()
         if self.is_running():
             system_logger.warn("system already running")
             return
         system_logger.info("starting")
-
+        import pdb
+        #pdb.set_trace();
         if self.serial is None:
             self.serial = SerialStream("/dev/ttyS0", 115200, timeout=5)
             self.serial.connect()
@@ -196,6 +200,10 @@ class System(object):
 
     def stop(self):
         system_logger.info("stopping")
+        usb_ampel.switch(None, None)
+        # todo: implement proper shutdown.
+        import os
+        os._exit(1)
         if self.mdb:
             for i in range(20):
                 self.mdb.dispense_permitted = None
