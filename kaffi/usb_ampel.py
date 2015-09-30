@@ -10,10 +10,8 @@ clewarecontrol = '/opt/vis/clewarecontrol'
 light = {u'green':'2', u'yellow':'1', u'red':'0'}
 
 def switch(status, old_status):
-    if status == old_status:
-        return
     try:
-        if old_status is not None:
+        if old_status is not None and status != old_status:
             subprocess.call([clewarecontrol, '-c', '1', '-as', light[old_status] ,'0' ])
         if status is not None:
             subprocess.call([clewarecontrol, '-c', '1', '-as', light[status] ,'1' ])
